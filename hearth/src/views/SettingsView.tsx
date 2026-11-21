@@ -14,7 +14,7 @@ import { toast } from '../components/Toast';
 import { ImmichSettings } from '../components/ImmichSettings';
 import { SS_STYLES } from './Screensaver';
 import { TABS } from '../lib/tabs';
-import { useAllCameras } from '../lib/cameras';
+import { cameraLabel, useAllCameras } from '../lib/cameras';
 import { useStore } from '../lib/store';
 import type { Member, Settings } from '../lib/types';
 import { PALETTE, uid } from '../lib/util';
@@ -466,6 +466,7 @@ export function SettingsView() {
       <Section id="cameras" title={t('Cameras')} summary={settings.cameras.list.length ? t('{n} chosen', { n: settings.cameras.list.length }) : undefined}>
         <EntityPicker
           entities={cameras}
+          labelFor={cameraLabel}
           selected={settings.cameras.list}
           onChange={(v) => s('cameras', { ...settings.cameras, list: v })}
           placeholder={t('Search cameras…')}
@@ -486,6 +487,7 @@ export function SettingsView() {
               <div className="today-cam-picker">
                 <EntityPicker
                   entities={cameras}
+          labelFor={cameraLabel}
                   selected={settings.cameras.today.cameras}
                   onChange={(v) => s('cameras', { ...settings.cameras, today: { ...settings.cameras.today, cameras: v } })}
                   placeholder={t('Add cameras to Today…')}

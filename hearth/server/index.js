@@ -15,7 +15,7 @@ const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.15.4';
+const VERSION = process.env.HEARTH_VERSION || '0.15.5';
 
 // Add-on options (set on the add-on's Configuration tab in Home Assistant).
 let options = {};
@@ -473,7 +473,14 @@ async function route(req, res) {
       const r = await fetch(`${fb}/api/config`, { signal: AbortSignal.timeout(8000) });
       if (!r.ok) return send(res, 200, []);
       const cfg = await r.json();
-      return send(res, 200, Object.entries(cfg.cameras || {}).filter(([, c]) => c?.enabled !== false).map(([n]) => n));
+      // Every camera in Frigate's config (a camera switched off at runtime is still a camera you may want).
+      let names = Object.keys(cfg.cameras || {});
+      if (!names.length) {
+        // Fall back to the live stats, which list running cameras.
+        const st = await fetch(`${fb}/api/stats`, { signal: AbortSignal.timeout(8000) }).then((x) => (x.ok ? x.json() : {})).catch(() => ({}));
+        names = Object.keys(st.cameras || {});
+      }
+      return send(res, 200, names);
     } catch {
       return send(res, 200, []);
     }

@@ -20,23 +20,39 @@ export function liveUrl(ref: string, h = 720, fps = 10) {
 
 const pretty = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
-let frigateCache: Promise<string[]> | null = null;
+let frigateCache: { at: number; list: Promise<string[]> } | null = null;
+function loadFrigate(): Promise<string[]> {
+  // Keep a good answer for 5 minutes; retry an empty one (Frigate may not have been found yet) after 20 s.
+  if (frigateCache && Date.now() - frigateCache.at < 5 * 60000) return frigateCache.list;
+  const list = fetch('api/frigate/cameras')
+    .then((r) => (r.ok ? r.json() : []))
+    .then((l) => (Array.isArray(l) ? (l as string[]) : []))
+    .catch(() => [] as string[]);
+  frigateCache = { at: Date.now(), list };
+  list.then((l) => {
+    if (!l.length && frigateCache?.list === list) frigateCache.at = Date.now() - 5 * 60000 + 20000;
+  });
+  return list;
+}
+
 /** Camera names Frigate knows about (empty if Frigate isn't connected). */
 export function useFrigateCameras() {
   const [list, setList] = useState<string[]>([]);
   useEffect(() => {
-    frigateCache ??= fetch('api/frigate/cameras')
-      .then((r) => (r.ok ? r.json() : []))
-      .then((l) => (Array.isArray(l) ? l : []))
-      .catch(() => []);
     let alive = true;
-    frigateCache.then((l) => alive && setList(l));
+    const load = () => loadFrigate().then((l) => alive && setList((prev) => (prev.join() === l.join() ? prev : l)));
+    load();
+    const id = setInterval(load, 30000);
     return () => {
       alive = false;
+      clearInterval(id);
     };
   }, []);
   return list;
 }
+
+/** "frigate:side_door" → "Side Door · Frigate" (used when a camera isn't in the current list). */
+export const cameraLabel = (ref: string) => (isFrigate(ref) ? `${pretty(frigateName(ref))} · Frigate` : ref);
 
 /** Every camera Hearth can show: HA camera entities plus Frigate's own cameras. */
 export function useAllCameras() {

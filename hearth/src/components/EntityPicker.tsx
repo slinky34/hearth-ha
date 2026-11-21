@@ -10,12 +10,15 @@ export function EntityPicker({
   onChange,
   placeholder,
   emptyHint,
+  labelFor,
 }: {
   entities: EntityInfo[];
   selected: string[];
   onChange: (ids: string[]) => void;
   placeholder: string;
   emptyHint?: string;
+  /** Name for a chosen id that isn't in `entities` right now. */
+  labelFor?: (id: string) => string;
 }) {
   const [q, setQ] = useState('');
   const [focus, setFocus] = useState(false);
@@ -33,7 +36,7 @@ export function EntityPicker({
         <div className="chips">
           {selected.map((id) => (
             <span key={id} className="chip on picked" title={id}>
-              {byId.get(id)?.name ?? id}
+              {byId.get(id)?.name ?? labelFor?.(id) ?? id}
               <button onClick={() => onChange(selected.filter((x) => x !== id))} aria-label={t('Remove {name}', { name: byId.get(id)?.name ?? id })}>
                 <X size={14} />
               </button>

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.5
+- **All Frigate cameras show:** the camera pickers list every camera in Frigate's config, including ones switched off at the moment.
+- The Frigate camera list refreshes by itself. Before, if the first check came back empty, the cameras stayed missing until you reloaded.
+- Chosen cameras show readable names (for example "Side Door · Frigate" instead of "frigate:sidedoor").
+
 ## 0.15.4
 - **Grocy add-on detection:** if Home Assistant won't share its add-on list, Hearth now also tries the Grocy add-on's usual address directly.
 - When Hearth can't find Grocy, Settings → Integrations lists what it tried, to make the cause easy to spot.
