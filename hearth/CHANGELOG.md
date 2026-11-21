@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0
+- **Music search:** search your Music Assistant library for songs, albums, playlists, and artists from the Music screen. Tap a song or artist to play it, or an album or playlist to see its songs.
+- **Collapsible Tasks:** fold a person's column into a slim strip that still shows their progress.
+- **Collapsible Meals:** fold a meal row (for example Breakfast) into a thin bar showing how many are planned.
+- Folded columns and rows are remembered on each screen.
+
 ## 0.8.2
 - **Collapsible lists:** tap a list's header on the Lists screen to fold it down to its name and item count. Each screen remembers which lists are folded.
 

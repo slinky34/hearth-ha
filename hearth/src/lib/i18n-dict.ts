@@ -484,4 +484,12 @@ export const DICT: Record<string, string[]> = {
   "{n} phones": ["{n} Handys", "{n} teléfonos", "{n} téléphones", "{n} telefoni", "スマホ {n} 台", "휴대폰 {n}대", "{n} telefoons", "{n} celulares"],
   "{n} connected": ["{n} verbunden", "{n} conectadas", "{n} connectées", "{n} connesse", "{n} 件接続済み", "{n}개 연결됨", "{n} verbonden", "{n} conectadas"],
   "Problem": ["Problem", "Problema", "Problème", "Problema", "問題あり", "문제", "Probleem", "Problema"],
+  "Search songs, albums, artists…": ["Titel, Alben, Künstler suchen…", "Buscar canciones, álbumes, artistas…", "Rechercher titres, albums, artistes…", "Cerca brani, album, artisti…", "曲・アルバム・アーティストを検索…", "곡, 앨범, 아티스트 검색…", "Zoek nummers, albums, artiesten…", "Buscar músicas, álbuns, artistas…"],
+  "Searching…": ["Suche…", "Buscando…", "Recherche…", "Ricerca…", "検索中…", "검색 중…", "Zoeken…", "Buscando…"],
+  "Songs": ["Titel", "Canciones", "Titres", "Brani", "曲", "곡", "Nummers", "Músicas"],
+  "Artists": ["Künstler", "Artistas", "Artistes", "Artisti", "アーティスト", "아티스트", "Artiesten", "Artistas"],
+  "Clear search": ["Suche leeren", "Borrar búsqueda", "Effacer la recherche", "Cancella ricerca", "検索をクリア", "검색 지우기", "Zoekopdracht wissen", "Limpar busca"],
+  "Collapse": ["Einklappen", "Contraer", "Réduire", "Comprimi", "折りたたむ", "접기", "Inklappen", "Recolher"],
+  "Show {name}": ["{name} anzeigen", "Mostrar a {name}", "Afficher {name}", "Mostra {name}", "{name} を表示", "{name} 보기", "{name} tonen", "Mostrar {name}"],
+  "{n} planned": ["{n} geplant", "{n} planificadas", "{n} prévus", "{n} pianificati", "{n} 件の予定", "{n}개 계획됨", "{n} gepland", "{n} planejadas"],
 };

@@ -406,6 +406,18 @@ export function createMockHA() {
               })),
             },
           });
+        case 'music_assistant.search': {
+          const q = String(body.name || '').toLowerCase();
+          const hit = (x) => x.toLowerCase().includes(q);
+          const tracks = SONGS.map((name, i) => ({ media_type: 'track', name, uri: `library://track/${900 + i}`, image: null, artists: [{ name: ARTISTS[i] }] }))
+            .filter((x) => hit(x.name) || hit(x.artists[0].name));
+          const albums = ALBUMS.map((a, i) => ({ media_type: 'album', name: a[0], uri: `library://album/${i + 1}`, image: null, artists: [{ name: a[1] }] }))
+            .filter((x) => hit(x.name) || hit(x.artists[0].name));
+          const playlists = ['Family Favorites', 'Dinner Jazz', 'Kids Dance Party', 'Sunday Morning', 'Road Trip', 'Bedtime']
+            .map((name, i) => ({ media_type: 'playlist', name, uri: `library://playlist/${i + 1}`, image: null })).filter((x) => hit(x.name));
+          const artists = [...new Set(ARTISTS)].map((name, i) => ({ media_type: 'artist', name, uri: `library://artist/${i + 1}`, image: null })).filter((x) => hit(x.name));
+          return ok({ changed_states: [], service_response: { tracks, albums, playlists, artists, radio: [] } });
+        }
         case 'music_assistant.play_media':
           if (entities.some((e) => !MASS.has(e)))
             return { status: 400, data: { message: `Entity ${entities[0]} is not a Music Assistant player` } };

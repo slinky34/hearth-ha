@@ -31,3 +31,26 @@ export function useIdle(minutes: number) {
   }, [minutes]);
   return [idle, setIdle] as const;
 }
+
+/** A folded/unfolded flag remembered on this device (localStorage), e.g. for collapsible cards. */
+export function useFolded(key: string, initial = false) {
+  const k = `hearth.fold.${key}`;
+  const [folded, setFolded] = useState(() => {
+    try {
+      const v = localStorage.getItem(k);
+      return v == null ? initial : v === '1';
+    } catch {
+      return initial;
+    }
+  });
+  const toggle = () =>
+    setFolded((f) => {
+      try {
+        localStorage.setItem(k, f ? '0' : '1');
+      } catch {
+        /* storage blocked */
+      }
+      return !f;
+    });
+  return [folded, toggle] as const;
+}

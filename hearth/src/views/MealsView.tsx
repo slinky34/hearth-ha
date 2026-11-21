@@ -1,5 +1,5 @@
 import { addDays, addWeeks, isToday, startOfWeek } from 'date-fns';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { useGrocy } from '../lib/grocy';
 import { mealPlan, type PlanEntry } from '../lib/mealie';
@@ -22,6 +22,24 @@ export function MealsView() {
   const [editing, setEditing] = useState<string | null>(null); // `${dateKey}|${meal}`
   const [draft, setDraft] = useState('');
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  // Meal rows can be folded (e.g. hide Breakfast); remembered on this device.
+  const [foldedRows, setFoldedRows] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('hearth.fold.meals') || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const toggleRow = (k: string) =>
+    setFoldedRows((prev) => {
+      const next = prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k];
+      try {
+        localStorage.setItem('hearth.fold.meals', JSON.stringify(next));
+      } catch {
+        /* storage blocked */
+      }
+      return next;
+    });
   const { grocy } = useGrocy();
   const [mealie, setMealie] = useState<PlanEntry[]>([]);
   useEffect(() => {
@@ -78,12 +96,17 @@ export function MealsView() {
           </div>
         ))}
         {MEALS.map((m) => (
-          <div key={m.key} className="meal-row">
-            <div className="meal-label">
+          <div key={m.key} className={`meal-row ${foldedRows.includes(m.key) ? 'folded' : ''}`}>
+            <button className="meal-label" onClick={() => toggleRow(m.key)} aria-expanded={!foldedRows.includes(m.key)}>
               <span>{m.icon}</span>
               {t(m.label)}
-            </div>
-            {days.map((d) => {
+              <ChevronDown size={16} className="section-chevron" />
+            </button>
+            {foldedRows.includes(m.key) ? (
+              <button className="meal-folded" onClick={() => toggleRow(m.key)}>
+                {t('{n} planned', { n: days.filter((d) => data.meals[dateKey(d)]?.[m.key] || mealieFor(dateKey(d), m.key).length || grocyMeal(dateKey(d), m.key)).length })}
+              </button>
+            ) : days.map((d) => {
               const k = dateKey(d);
               const id = `${k}|${m.key}`;
               const value = data.meals[k]?.[m.key];

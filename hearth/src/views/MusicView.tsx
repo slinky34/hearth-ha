@@ -1,4 +1,4 @@
-import { Disc3, ListMusic, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume1, Volume2 } from 'lucide-react';
+import { Disc3, ListMusic, Mic2, Pause, Play, Repeat, Repeat1, Search, Shuffle, SkipBack, SkipForward, Volume1, Volume2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Modal } from '../components/Modal';
 import { AlbumArt } from '../components/NowPlaying';
@@ -52,6 +52,10 @@ export function MusicView() {
   const { players, massPlayers, active, select, call } = useMusic();
   const [target, setTarget] = useState<string>('');
   const [lib, setLib] = useState<{ playlists: LibItem[]; albums: LibItem[] } | null>(null);
+  const [entryId, setEntryId] = useState<string | null>(null);
+  const [q, setQ] = useState('');
+  const [found, setFound] = useState<{ tracks: any[]; albums: LibItem[]; playlists: LibItem[]; artists: any[] } | null>(null);
+  const searching = q.trim().length >= 2;
   const [open, setOpen] = useState<LibItem | null>(null);
 
   // Music Assistant library, when it's installed.
@@ -60,6 +64,7 @@ export function MusicView() {
       try {
         const { entry_id } = await api.musicAssistantEntry();
         if (!entry_id) return;
+        setEntryId(entry_id);
         const get = (media_type: string) =>
           api
             .service<{ service_response: { items: any[] } }>('music_assistant', 'get_library', { config_entry_id: entry_id, media_type, limit: 30 }, true)
@@ -81,6 +86,32 @@ export function MusicView() {
       }
     })();
   }, []);
+
+  // Music Assistant search (debounced).
+  useEffect(() => {
+    if (!entryId || !searching) return setFound(null);
+    const id = setTimeout(async () => {
+      try {
+        const r = await api.service<{ service_response: Record<string, any[]> }>(
+          'music_assistant', 'search', { config_entry_id: entryId, name: q.trim(), limit: 8 }, true,
+        );
+        const sr = r.service_response ?? {};
+        const lib = (x: any, kind: 'album' | 'playlist'): LibItem => ({
+          name: x.name, uri: x.uri, image: imageOf(x.image), kind,
+          subtitle: (x.artists ?? []).map((a: any) => a?.name).filter(Boolean).join(', ') || undefined,
+        });
+        setFound({
+          tracks: sr.tracks ?? [],
+          albums: (sr.albums ?? []).map((x) => lib(x, 'album')),
+          playlists: (sr.playlists ?? []).map((x) => lib(x, 'playlist')),
+          artists: sr.artists ?? [],
+        });
+      } catch {
+        setFound({ tracks: [], albums: [], playlists: [], artists: [] });
+      }
+    }, 400);
+    return () => clearTimeout(id);
+  }, [q, entryId, searching]);
 
   if (players.length === 0)
     return (
@@ -117,7 +148,20 @@ export function MusicView() {
   return (
     <div className="music">
       <div className="view-head">
-        <h1>{t('Music')}</h1>
+        <div className="nav-group">
+          <h1>{t('Music')}</h1>
+          {entryId && (
+            <label className="search-box music-search">
+              <Search size={18} />
+              <input placeholder={t('Search songs, albums, artists…')} value={q} onChange={(e) => setQ(e.target.value)} />
+              {q && (
+                <button onClick={() => setQ('')} aria-label={t('Clear search')}>
+                  <X size={16} />
+                </button>
+              )}
+            </label>
+          )}
+        </div>
         <div className="chips">
           {players.map((pl) => (
             <button key={pl.id} className={`chip ${pl.id === p.id ? 'on' : ''}`} onClick={() => select(pl.id)}>
@@ -185,7 +229,17 @@ export function MusicView() {
           </div>
         </div>
 
-        {lib && (lib.playlists.length > 0 || lib.albums.length > 0) && (
+        {searching && (
+          <SearchResults
+            found={found}
+            onOpen={setOpen}
+            onPlay={async (data) => {
+              if (playTarget && (await call('music_assistant.play_media', data, playTarget.id))) select(playTarget.id);
+            }}
+          />
+        )}
+
+        {!searching && lib && (lib.playlists.length > 0 || lib.albums.length > 0) && (
           <>
             <div className="playlist-head">
               <span className="muted small">Music Assistant</span>
@@ -307,5 +361,66 @@ function TrackList({ item, player, onClose, onPlay, onShuffle }: {
         )}
       </div>
     </Modal>
+  );
+}
+
+function SearchResults({ found, onOpen, onPlay }: {
+  found: { tracks: any[]; albums: LibItem[]; playlists: LibItem[]; artists: any[] } | null;
+  onOpen: (it: LibItem) => void;
+  onPlay: (data: Record<string, unknown>) => void;
+}) {
+  if (!found) return <p className="muted">{t('Searching…')}</p>;
+  const none = !found.tracks.length && !found.albums.length && !found.playlists.length && !found.artists.length;
+  if (none) return <p className="muted">{t('No matches')}</p>;
+  const grid = (title: string, items: LibItem[]) =>
+    items.length > 0 && (
+      <section className="playlists">
+        <h3 className="today-label">{title}</h3>
+        <div className="playlist-grid">
+          {items.map((it) => (
+            <button key={it.uri} className="playlist" onClick={() => onOpen(it)}>
+              <Cover item={it} />
+              <span>{it.name}</span>
+              {it.subtitle && <span className="muted small">{it.subtitle}</span>}
+            </button>
+          ))}
+        </div>
+      </section>
+    );
+  return (
+    <div className="search-results">
+      {found.tracks.length > 0 && (
+        <section>
+          <h3 className="today-label">{t('Songs')}</h3>
+          <ol className="tracks">
+            {found.tracks.map((tr: any) => (
+              <li key={tr.uri}>
+                <button onClick={() => onPlay({ media_id: tr.uri, media_type: 'track', enqueue: 'replace' })}>
+                  <span className="grow">
+                    <b>{tr.name}</b>
+                    <span className="muted small">{(tr.artists ?? []).map((a: any) => a?.name).filter(Boolean).join(', ')}</span>
+                  </span>
+                  <Play size={16} className="track-play" />
+                </button>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+      {found.artists.length > 0 && (
+        <section>
+          <h3 className="today-label">{t('Artists')}</h3>
+          <div className="chips">
+            {found.artists.map((a: any) => (
+              <button key={a.uri} className="chip" onClick={() => onPlay({ media_id: a.uri, media_type: 'artist', enqueue: 'replace' })}>
+                <Mic2 size={16} /> {a.name}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      {grid(t('Albums'), found.albums)}
+      {grid(t('Playlists'), found.playlists)}
+    </div>
   );
 }

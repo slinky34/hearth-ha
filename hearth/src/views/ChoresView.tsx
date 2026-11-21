@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import { useGrocy } from '../lib/grocy';
 import { useHa } from '../lib/ha';
 import { useKiosk } from '../lib/kiosk';
+import { useFolded } from '../lib/hooks';
 import { useStore } from '../lib/store';
 import type { Chore, Completions, Member, Period, TodoItem } from '../lib/types';
 import { dateKey, dueOn, initials, pastel, uid } from '../lib/util';
@@ -99,6 +100,7 @@ function MemberColumn({ m, day, onToggle, layout }: {
   const n = due.filter((c) => done.has(c.id)).length + todoOpen.filter((i) => i.status === 'completed').length;
   const streak = streakFor(m, chores, completions);
   const listName = entities.find((e) => e.entity_id === m.todo)?.name ?? t('To-do');
+  const [folded, toggleFold] = useFolded(`task.${m.id}`);
 
   const ChoreCard = ({ c }: { c: Chore }) => {
     const isDone = done.has(c.id);
@@ -122,6 +124,22 @@ function MemberColumn({ m, day, onToggle, layout }: {
     );
   };
 
+  if (folded)
+    return (
+      <section className="task-col folded" style={{ ['--member' as string]: m.color }}>
+        <button className="fold-strip" onClick={toggleFold} aria-expanded={false} title={t('Show {name}', { name: m.name })}>
+          <span className="avatar lg" style={{ background: m.color }}>
+            {initials(m.name)}
+          </span>
+          <span className="stat-pill">
+            {n}/{total}
+          </span>
+          <span className="fold-name">{m.name}</span>
+          <ChevronRight size={18} className="muted" />
+        </button>
+      </section>
+    );
+
   return (
     <section className={`task-col ${layout} ${total > 0 && n === total ? 'all-done' : ''}`} style={{ ['--member' as string]: m.color }}>
       <header className="task-head">
@@ -144,6 +162,9 @@ function MemberColumn({ m, day, onToggle, layout }: {
             )}
           </div>
         </div>
+        <button className="icon-btn fold-btn" onClick={toggleFold} aria-label={t('Collapse')}>
+          <ChevronLeft size={20} />
+        </button>
       </header>
 
       {layout === 'cards' && (
