@@ -4,6 +4,7 @@ import { AlbumArt } from '../components/NowPlaying';
 import { api } from '../lib/api';
 import { useNow } from '../lib/hooks';
 import { useMusic, type Player } from '../lib/music';
+import { t } from '../lib/i18n';
 
 interface Playlist {
   name: string;
@@ -57,9 +58,9 @@ export function MusicView() {
     return (
       <div className="music">
         <div className="view-head">
-          <h1>Music</h1>
+          <h1>{t('Music')}</h1>
         </div>
-        <div className="empty">No media players found in Home Assistant. Speakers from Sonos, Music Assistant, Spotify Connect, Google Cast, and others show up here.</div>
+        <div className="empty">{t('No media players found in Home Assistant. Speakers from Sonos, Music Assistant, Spotify Connect, Google Cast, and others show up here.')}</div>
       </div>
     );
 
@@ -68,7 +69,7 @@ export function MusicView() {
   return (
     <div className="music">
       <div className="view-head">
-        <h1>Music</h1>
+        <h1>{t('Music')}</h1>
         <div className="chips">
           {players.map((pl) => (
             <button key={pl.id} className={`chip ${pl.id === p.id ? 'on' : ''}`} onClick={() => select(pl.id)}>
@@ -83,18 +84,18 @@ export function MusicView() {
         <div className="music-now card">
           <AlbumArt player={p} size={220} />
           <div className="music-meta">
-            <h2>{p.title ?? (p.state === 'off' ? 'Off' : 'Nothing playing')}</h2>
+            <h2>{p.title ?? (p.state === 'off' ? t('Off') : t('Nothing playing'))}</h2>
             {p.artist && <p className="muted">{p.artist}</p>}
             {p.album && <p className="muted small">{p.album}</p>}
             <Progress p={p} />
             <div className="music-controls">
-              <button className="icon-btn big" onClick={() => call('media_previous_track')} aria-label="Previous">
+              <button className="icon-btn big" onClick={() => call('media_previous_track')} aria-label={t('Previous')}>
                 <SkipBack size={28} fill="currentColor" />
               </button>
-              <button className="icon-btn play" onClick={() => call('media_play_pause')} aria-label={playing ? 'Pause' : 'Play'}>
+              <button className="icon-btn play" onClick={() => call('media_play_pause')} aria-label={playing ? t('Pause') : t('Play')}>
                 {playing ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" />}
               </button>
-              <button className="icon-btn big" onClick={() => call('media_next_track')} aria-label="Next">
+              <button className="icon-btn big" onClick={() => call('media_next_track')} aria-label={t('Next')}>
                 <SkipForward size={28} fill="currentColor" />
               </button>
             </div>
@@ -108,7 +109,7 @@ export function MusicView() {
                   step={0.02}
                   value={p.volume}
                   onChange={(e) => call('volume_set', { volume_level: Number(e.target.value) })}
-                  aria-label="Volume"
+                  aria-label={t('Volume')}
                 />
                 <Volume2 size={20} />
               </label>
@@ -119,7 +120,7 @@ export function MusicView() {
         {entry && playlists && playlists.length > 0 && (
           <section className="playlists">
             <h3 className="today-label">
-              <ListMusic size={14} /> Playlists · Music Assistant
+              <ListMusic size={14} /> {t('Playlists')} · Music Assistant
             </h3>
             <div className="playlist-grid">
               {playlists.map((pl) => (

@@ -188,6 +188,8 @@ export function createMockHA() {
         return ok(eventsFor(cal, new Date(url.searchParams.get('start')), new Date(url.searchParams.get('end'))));
       }
       if (method === 'GET' && p === '/states') return ok(states());
+      if (method === 'GET' && p === '/services')
+        return ok([{ domain: 'notify', services: { mobile_app_jordans_phone: {}, mobile_app_alexs_ipad: {}, persistent_notification: {}, send_message: {} } }]);
       if (method === 'GET' && p === '/config/config_entries/entry')
         return ok([{ entry_id: 'mock_mass', domain: 'music_assistant', state: 'loaded', title: 'Music Assistant' }]);
       if (method === 'GET' && p.startsWith('/states/')) {
@@ -197,6 +199,10 @@ export function createMockHA() {
       if (method !== 'POST') return { status: 404, data: { message: 'Not found' } };
 
       const svc = p.replace('/services/', '').replace('/', '.');
+      if (svc.startsWith('notify.')) {
+        console.log(`[mock notify] ${svc}: ${body.title} — ${body.message}`);
+        return ok([]);
+      }
       const entities = ids(body.entity_id || []);
       switch (svc) {
         case 'todo.get_items': {

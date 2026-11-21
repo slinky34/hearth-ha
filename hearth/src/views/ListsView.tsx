@@ -1,4 +1,4 @@
-import { format, parseISO } from 'date-fns';
+import { parseISO } from 'date-fns';
 import { Check, ChevronDown, Plus, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
@@ -6,6 +6,7 @@ import { useGrocy } from '../lib/grocy';
 import { useHa } from '../lib/ha';
 import { useStore } from '../lib/store';
 import type { TodoItem } from '../lib/types';
+import { dateShort, t } from '../lib/i18n';
 
 /**
  * Some apps (e.g. Mealie's device sync) write raw JSON into HA to-do lists.
@@ -22,7 +23,7 @@ export function readableItem(summary: string): { text: string; raw: boolean } {
   } catch {
     /* not valid JSON; fall through */
   }
-  const text = [prefix, label].filter(Boolean).join(' · ') || 'Data item';
+  const text = [prefix, label].filter(Boolean).join(' · ') || t('Data item');
   return { text, raw: true };
 }
 
@@ -36,12 +37,12 @@ export function ListsView() {
   return (
     <div className="lists">
       <div className="view-head">
-        <h1>Lists</h1>
+        <h1>{t('Lists')}</h1>
       </div>
       {error && <div className="banner">Home Assistant: {error}</div>}
       {shown.length === 0 && !grocy.shopping && !error && (
         <div className="empty">
-          No lists found. Add Shopping List, Local To-do, AnyList, Todoist, or Grocy in Home Assistant, then pick lists in Settings.
+          {t('No lists found. Add Shopping List, Local To-do, AnyList, Todoist, or Grocy in Home Assistant, then pick lists in Settings.')}
         </div>
       )}
       <div className="list-grid">
@@ -52,13 +53,13 @@ export function ListsView() {
         {grocy.expiring && grocy.expiring.length > 0 && (
           <section className="card todo">
             <header>
-              <h2>Expiring soon</h2>
+              <h2>{t('Expiring soon')}</h2>
               <span className="muted small">Grocy</span>
             </header>
             <div className="todo-items">
               {grocy.expiring.map((p) => (
                 <div key={p.id} className="todo-item static">
-                  <span className="expiry">{p.date ? format(parseISO(p.date), 'MMM d') : '—'}</span>
+                  <span className="expiry">{p.date ? dateShort(parseISO(p.date)) : '—'}</span>
                   <span className="item-text">
                     {p.name}
                     {p.amount > 1 && <span className="muted"> × {p.amount}</span>}
@@ -78,7 +79,7 @@ function ItemText({ summary }: { summary: string }) {
   return (
     <span className="item-text" title={r.raw ? summary : undefined}>
       {r.text}
-      {r.raw && <span className="raw-tag">data</span>}
+      {r.raw && <span className="raw-tag">{t('data')}</span>}
     </span>
   );
 }
@@ -147,8 +148,8 @@ function TodoCard({ entity, name }: { entity: string; name: string }) {
           add();
         }}
       >
-        <input placeholder="Add an item" value={text} onChange={(e) => setText(e.target.value)} />
-        <button className="icon-btn filled" type="submit" aria-label="Add">
+        <input placeholder={t('Add an item')} value={text} onChange={(e) => setText(e.target.value)} />
+        <button className="icon-btn filled" type="submit" aria-label={t('Add')}>
           <Plus />
         </button>
       </form>
@@ -160,12 +161,12 @@ function TodoCard({ entity, name }: { entity: string; name: string }) {
             <ItemText summary={it.summary} />
           </button>
         ))}
-        {open.length === 0 && !loading && <p className="muted center">All clear ✨</p>}
+        {open.length === 0 && !loading && <p className="muted center">{t('All clear')} ✨</p>}
       </div>
       {done.length > 0 && (
         <div className="todo-done">
           <button className="link" onClick={() => setShowDone((s) => !s)}>
-            <ChevronDown size={16} style={{ rotate: showDone ? '180deg' : '0deg' }} /> Completed ({done.length})
+            <ChevronDown size={16} style={{ rotate: showDone ? '180deg' : '0deg' }} /> {t('Completed')} ({done.length})
           </button>
           {showDone && (
             <>
@@ -178,7 +179,7 @@ function TodoCard({ entity, name }: { entity: string; name: string }) {
                 </button>
               ))}
               <button className="btn ghost small" onClick={() => run(() => api.service('todo', 'remove_completed_items', { entity_id: entity }))}>
-                Clear completed
+                {t('Clear completed')}
               </button>
             </>
           )}
@@ -212,12 +213,12 @@ function GrocyShopping({ items, reload }: { items: { id: number; name: string; a
   return (
     <section className="card todo">
       <header>
-        <h2>Grocy shopping</h2>
+        <h2>{t('Grocy shopping')}</h2>
         <span className="muted">{open.length}</span>
       </header>
       <form className="add-row" onSubmit={(e) => { e.preventDefault(); add(); }}>
-        <input placeholder="Add an item" value={text} onChange={(e) => setText(e.target.value)} />
-        <button className="icon-btn filled" type="submit" aria-label="Add">
+        <input placeholder={t('Add an item')} value={text} onChange={(e) => setText(e.target.value)} />
+        <button className="icon-btn filled" type="submit" aria-label={t('Add')}>
           <Plus />
         </button>
       </form>
@@ -231,7 +232,7 @@ function GrocyShopping({ items, reload }: { items: { id: number; name: string; a
             </span>
           </button>
         ))}
-        {local.length === 0 && <p className="muted center">All clear ✨</p>}
+        {local.length === 0 && <p className="muted center">{t('All clear')} ✨</p>}
       </div>
     </section>
   );

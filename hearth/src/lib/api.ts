@@ -47,6 +47,8 @@ export const api = {
   states: (opts: { domains?: string[]; ids?: string[] }) =>
     j<HaState[]>(`api/ha/states?${new URLSearchParams({ domains: (opts.domains ?? []).join(','), ids: (opts.ids ?? []).join(',') })}`),
   mediaImageUrl: (entity: string, key: string) => `api/ha/media_image/${entity}?v=${encodeURIComponent(key)}`,
+  notifyTargets: () => j<string[]>('api/ha/notify_targets'),
+  notifyTest: (target: string) => j<{ ok: boolean }>('api/notify/test', post({ target })),
   musicAssistantEntry: () => j<{ entry_id: string | null }>('api/ha/music_assistant'),
 
   calendars: () => j<CalendarInfo[]>('api/ha/calendars'),

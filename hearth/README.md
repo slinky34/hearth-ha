@@ -9,6 +9,10 @@ A self-hosted, Skylight-style family wall display that runs as a Home Assistant 
 - **Meals**: a weekly planner. The Grocy meal plan fills empty slots.
 - **Music**: the now-playing pill in the header, full controls (play/pause, skip, volume) for any HA media player, and Music Assistant playlists.
 - **Home**: tap tiles for lights, switches, fans, scenes, and scripts, plus sensor readouts. Locks, alarms, and garage doors are intentionally excluded.
+- **Timers**: several named timers at once, with presets (Pasta, Oven, Homework…). They're shared across screens, and the alarm chimes and flashes until dismissed.
+- **Notifications**: on-screen reminders before events. The add-on can also send event reminders, timer alerts, and a daily "chores left" message to phones through HA notify services.
+- **Themes**: Hearth, Skylight, Midnight, Midnight Light, Nord, Dracula, Monokai, Rose, and Forest, with light/dark/automatic appearance.
+- **Languages**: English, Deutsch, Español, Français, Italiano, 日本語, 한국어, Nederlands, and Português.
 - **Photos and screensaver**: photos from any folder under `/media` or `/share`, including subfolders. The screensaver shows the clock, weather, what's next, and what's playing.
 
 ### Integrations

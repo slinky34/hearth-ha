@@ -1,4 +1,4 @@
-import { format } from 'date-fns';
+
 import { useState } from 'react';
 import { useHa } from '../lib/ha';
 import { useNow } from '../lib/hooks';
@@ -7,6 +7,8 @@ import { initials } from '../lib/util';
 import { useWeather, weatherIcon, weatherLabel } from '../lib/weather';
 import { Modal } from './Modal';
 import { NowPlayingPill } from './NowPlaying';
+import { TimerChips } from './Timers';
+import { dateLong, format, t } from '../lib/i18n';
 
 export function TopBar({ onMusic }: { onMusic: () => void }) {
   const { data } = useStore();
@@ -25,15 +27,16 @@ export function TopBar({ onMusic }: { onMusic: () => void }) {
         {data.settings.familyName && <span className="family-name">{data.settings.familyName}</span>}
         <span className="time">{format(now, clock24 ? 'HH:mm' : 'h:mm')}</span>
         {!clock24 && <span className="ampm">{format(now, 'a')}</span>}
-        <span className="date">{format(now, 'EEEE, MMMM d')}</span>
+        <span className="date">{dateLong(now)}</span>
       </div>
 
       <div className="topbar-right">
+        <TimerChips />
         <NowPlayingPill onOpen={onMusic} />
         {data.members.length > 0 && (
-          <div className="member-filter" aria-label="Filter by family member">
+          <div className="member-filter" aria-label={t('Filter by family member')}>
             <button className={`chip ${selected.length === 0 ? 'on' : ''}`} onClick={() => setSelected([])}>
-              Everyone
+              {t('Everyone')}
             </button>
             {data.members.map((m) => {
               const on = selected.includes(m.id);
@@ -61,9 +64,9 @@ export function TopBar({ onMusic }: { onMusic: () => void }) {
       </div>
 
       {showForecast && weather && (
-        <Modal title="Forecast" onClose={() => setShowForecast(false)}>
+        <Modal title={t('Forecast')} onClose={() => setShowForecast(false)}>
           <p className="muted">
-            Now: {weatherLabel(weather.condition)}
+            {t('Now')}: {t(weatherLabel(weather.condition))}
             {weather.temp != null && `, ${weather.temp}${weather.unit}`}
           </p>
           <div className="forecast">
@@ -76,7 +79,7 @@ export function TopBar({ onMusic }: { onMusic: () => void }) {
                 {f.precip ? <span className="precip">💧{f.precip}%</span> : null}
               </div>
             ))}
-            {weather.forecast.length === 0 && <p className="muted">No daily forecast from this weather entity.</p>}
+            {weather.forecast.length === 0 && <p className="muted">{t('No daily forecast from this weather entity.')}</p>}
           </div>
         </Modal>
       )}

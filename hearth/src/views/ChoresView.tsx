@@ -1,4 +1,4 @@
-import { addDays, format, isToday, startOfDay } from 'date-fns';
+import { addDays, isToday, startOfDay } from 'date-fns';
 import { Check, ChevronLeft, ChevronRight, Flame, Pencil, Star, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Modal } from '../components/Modal';
@@ -8,7 +8,8 @@ import { useHa } from '../lib/ha';
 import { useKiosk } from '../lib/kiosk';
 import { useStore } from '../lib/store';
 import type { Chore, Completions, Member, Period, TodoItem } from '../lib/types';
-import { WEEKDAYS_SHORT, dateKey, dueOn, initials, pastel, uid } from '../lib/util';
+import { dateKey, dueOn, initials, pastel, uid } from '../lib/util';
+import { dateLong, t, weekdayNarrow } from '../lib/i18n';
 
 export const PERIODS: { id: Period; label: string; icon: string }[] = [
   { id: 'morning', label: 'Morning', icon: '🌅' },
@@ -97,7 +98,7 @@ function MemberColumn({ m, day, onToggle, layout }: {
   const total = due.length + todoOpen.length;
   const n = due.filter((c) => done.has(c.id)).length + todoOpen.filter((i) => i.status === 'completed').length;
   const streak = streakFor(m, chores, completions);
-  const listName = entities.find((e) => e.entity_id === m.todo)?.name ?? 'To-do';
+  const listName = entities.find((e) => e.entity_id === m.todo)?.name ?? t('To-do');
 
   const ChoreCard = ({ c }: { c: Chore }) => {
     const isDone = done.has(c.id);
@@ -122,7 +123,7 @@ function MemberColumn({ m, day, onToggle, layout }: {
   };
 
   return (
-    <section className={`task-col ${layout} ${total > 0 && n === total ? 'all-done' : ''}`} style={{ background: pastel(m.color, 0.16), ['--member' as string]: m.color }}>
+    <section className={`task-col ${layout} ${total > 0 && n === total ? 'all-done' : ''}`} style={{ ['--member' as string]: m.color }}>
       <header className="task-head">
         <span className="avatar lg" style={{ background: m.color }}>
           {initials(m.name)}
@@ -153,7 +154,7 @@ function MemberColumn({ m, day, onToggle, layout }: {
             return (
               <Ring
                 key={p.id}
-                label={p.label}
+                label={t(p.label)}
                 pct={list.length ? (k / list.length) * 100 : 0}
                 color={m.color}
                 dim={!list.length}
@@ -173,7 +174,7 @@ function MemberColumn({ m, day, onToggle, layout }: {
           if (!list.length) return null;
           return (
             <div key={p.id} className="task-section">
-              {layout === 'cards' && <h3 className="task-section-title">{p.label}</h3>}
+              {layout === 'cards' && <h3 className="task-section-title">{t(p.label)}</h3>}
               {list.map((c) => <ChoreCard key={c.id} c={c} />)}
             </div>
           );
@@ -200,7 +201,7 @@ function MemberColumn({ m, day, onToggle, layout }: {
             })}
           </div>
         )}
-        {total === 0 && <p className="muted center">Nothing today 🎈</p>}
+        {total === 0 && <p className="muted center">{t('Nothing today')} 🎈</p>}
       </div>
     </section>
   );
@@ -217,8 +218,8 @@ function GrocyColumn() {
       <header className="task-head">
         <span className="avatar lg grocy-avatar">🏠</span>
         <div className="grow">
-          <h2>Household</h2>
-          <span className="muted small">Grocy chores due</span>
+          <h2>{t('Household')}</h2>
+          <span className="muted small">{t('Grocy chores due')}</span>
         </div>
       </header>
       <div className="task-scroll">
@@ -238,12 +239,12 @@ function GrocyColumn() {
             <span className="task-emoji small">🧽</span>
             <span className="task-title">
               {c.name}
-              {c.due && c.due < startOfDay(new Date()) && <span className="overdue"> · overdue</span>}
+              {c.due && c.due < startOfDay(new Date()) && <span className="overdue"> · {t('overdue')}</span>}
             </span>
             <span className="check">{busy === c.id && <Check size={18} strokeWidth={3} />}</span>
           </button>
         ))}
-        {due.length === 0 && <p className="muted center">All caught up ✨</p>}
+        {due.length === 0 && <p className="muted center">{t('All caught up')} ✨</p>}
       </div>
     </section>
   );
@@ -282,16 +283,16 @@ export function ChoresView() {
     <div className="chores">
       <div className="view-head">
         <div className="nav-group">
-          <button className="icon-btn" onClick={() => setDay((d) => addDays(d, -1))} aria-label="Previous day">
+          <button className="icon-btn" onClick={() => setDay((d) => addDays(d, -1))} aria-label={t('Previous day')}>
             <ChevronLeft />
           </button>
-          <button className="icon-btn" onClick={() => setDay((d) => addDays(d, 1))} aria-label="Next day">
+          <button className="icon-btn" onClick={() => setDay((d) => addDays(d, 1))} aria-label={t('Next day')}>
             <ChevronRight />
           </button>
-          <h1>{isToday(day) ? 'Tasks' : format(day, 'EEEE, MMM d')}</h1>
+          <h1>{isToday(day) ? t('Tasks') : dateLong(day)}</h1>
           {!isToday(day) && (
             <button className="btn ghost" onClick={() => setDay(startOfDay(new Date()))}>
-              Today
+              {t('Today')}
             </button>
           )}
         </div>
@@ -299,20 +300,20 @@ export function ChoresView() {
           <div className="segmented">
             {(['cards', 'compact'] as const).map((l) => (
               <button key={l} className={settings.choreLayout === l ? 'on' : ''} onClick={() => set('settings', (p) => ({ ...p, choreLayout: l }))}>
-                {l === 'cards' ? 'Cards' : 'Compact'}
+                {l === 'cards' ? t('Cards') : t('Compact')}
               </button>
             ))}
           </div>
           {!kiosk && (
             <button className="btn" onClick={() => setEditing(true)}>
-              <Pencil size={18} /> Edit
+              <Pencil size={18} /> {t('Edit')}
             </button>
           )}
         </div>
       </div>
 
       {members.length === 0 ? (
-        <div className="empty">Add your family in Settings to start assigning chores.</div>
+        <div className="empty">{t('Add your family in Settings to start assigning chores.')}</div>
       ) : (
         <div className={`task-board ${settings.choreLayout}`}>
           {shown.map((m) => (
@@ -347,7 +348,7 @@ function Celebrate({ member }: { member: Member }) {
         </span>
       ))}
       <div className="celebrate-msg" style={{ background: member.color }}>
-        All done, {member.name}! 🎉
+        {t('All done, {name}!', { name: member.name })} 🎉
       </div>
     </div>
   );
@@ -361,8 +362,8 @@ function ChoreEditor({ onClose }: { onClose: () => void }) {
   const [err, setErr] = useState<string | null>(null);
 
   const save = () => {
-    if (!form.title.trim()) return setErr('Name the chore.');
-    if (!form.memberId) return setErr('Pick who it’s for.');
+    if (!form.title.trim()) return setErr(t('Name the chore.'));
+    if (!form.memberId) return setErr(t('Pick who it’s for.'));
     const chore = { ...form, title: form.title.trim(), id: form.id || uid() };
     set('chores', (prev) => (form.id ? prev.map((c) => (c.id === form.id ? chore : c)) : [...prev, chore]));
     setForm(blank());
@@ -373,16 +374,16 @@ function ChoreEditor({ onClose }: { onClose: () => void }) {
     setForm((f) => ({ ...f, days: f.days.includes(d) ? f.days.filter((x) => x !== d) : [...f.days, d].sort() }));
 
   return (
-    <Modal title="Edit chores" onClose={onClose} wide>
+    <Modal title={t('Edit chores')} onClose={onClose} wide>
       <div className="chore-editor">
         <div className="form card-inset">
-          <h3>{form.id ? 'Edit chore' : 'Add a chore'}</h3>
+          <h3>{form.id ? t('Edit chore') : t('Add a chore')}</h3>
           <div className="row">
             <input className="emoji-input" placeholder="🧹" value={form.emoji} onChange={(e) => setForm({ ...form, emoji: e.target.value })} />
-            <input placeholder="Chore name" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            <input placeholder={t('Chore name')} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           </div>
           <label>
-            For
+            {t('For')}
             <div className="chips">
               {members.map((m) => (
                 <button
@@ -397,7 +398,7 @@ function ChoreEditor({ onClose }: { onClose: () => void }) {
             </div>
           </label>
           <label>
-            When
+            {t('When')}
             <div className="chips">
               {PERIODS.map((p) => (
                 <button
@@ -405,15 +406,15 @@ function ChoreEditor({ onClose }: { onClose: () => void }) {
                   className={`chip ${(form.period ?? 'anytime') === p.id ? 'on' : ''}`}
                   onClick={() => setForm({ ...form, period: p.id })}
                 >
-                  {p.icon} {p.id === 'anytime' ? 'Anytime' : p.label}
+                  {p.icon} {p.id === 'anytime' ? t('Anytime') : t(p.label)}
                 </button>
               ))}
             </div>
           </label>
           <label>
-            Repeats {form.days.length === 0 && <span className="muted">· every day</span>}
+            {t('Repeats')} {form.days.length === 0 && <span className="muted">· {t('every day')}</span>}
             <div className="chips">
-              {WEEKDAYS_SHORT.map((w, i) => (
+              {weekdayNarrow().map((w, i) => (
                 <button key={i} className={`chip round ${form.days.includes(i) ? 'on' : ''}`} onClick={() => toggleDay(i)}>
                   {w}
                 </button>
@@ -421,17 +422,17 @@ function ChoreEditor({ onClose }: { onClose: () => void }) {
             </div>
           </label>
           <label className="row">
-            Stars
+            {t('Stars')}
             <input type="number" min={0} max={20} value={form.points} onChange={(e) => setForm({ ...form, points: Number(e.target.value) || 0 })} style={{ width: 90 }} />
           </label>
           {err && <p className="error">{err}</p>}
           <div className="row">
             <button className="btn primary" onClick={save}>
-              {form.id ? 'Save' : 'Add chore'}
+              {form.id ? t('Save') : t('Add chore')}
             </button>
             {form.id && (
               <button className="btn ghost" onClick={() => setForm(blank())}>
-                Cancel
+                {t('Cancel')}
               </button>
             )}
           </div>
@@ -449,7 +450,7 @@ function ChoreEditor({ onClose }: { onClose: () => void }) {
                     <span className="grow">{c.title}</span>
                     <span className="muted small">
                       {PERIODS.find((p) => p.id === (c.period ?? 'anytime'))?.icon}{' '}
-                      {c.days.length ? c.days.map((d) => WEEKDAYS_SHORT[d]).join(' ') : 'Daily'} · {c.points}★
+                      {c.days.length ? c.days.map((d) => weekdayNarrow()[d]).join(' ') : t('Daily')} · {c.points}★
                     </span>
                     <button className="icon-btn" onClick={() => setForm(c)} aria-label="Edit">
                       <Pencil size={18} />

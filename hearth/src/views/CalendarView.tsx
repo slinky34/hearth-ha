@@ -1,7 +1,4 @@
-import {
-  addDays, addMonths, addWeeks, differenceInCalendarDays, endOfMonth, endOfWeek, format, isSameDay, isSameMonth,
-  isToday, parseISO, startOfDay, startOfMonth, startOfWeek,
-} from 'date-fns';
+import { addDays, addMonths, addWeeks, differenceInCalendarDays, endOfMonth, endOfWeek, isSameDay, isSameMonth, isToday, parseISO, startOfDay, startOfMonth, startOfWeek } from 'date-fns';
 import { ChevronLeft, ChevronRight, Clock, MapPin, Plus, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent } from 'react';
 import { Modal } from '../components/Modal';
@@ -12,6 +9,7 @@ import { useStore } from '../lib/store';
 import type { CalEvent, CalendarViewMode, Member } from '../lib/types';
 import { dateKey, dueOn, fmtShortTime, fmtTime, initials, pastel, stripes } from '../lib/util';
 import { useWeather, weatherIcon } from '../lib/weather';
+import { dateLong, dateMedium, dateShort, format, monthYear, t } from '../lib/i18n';
 
 const overlapsDay = (e: CalEvent, d: Date) => e.start < addDays(startOfDay(d), 1) && e.end > startOfDay(d);
 
@@ -66,7 +64,7 @@ export function MemberStrip() {
       {countdowns.map((c) => (
         <span key={c.id} className="countdown-chip">
           <span className="cd-emoji">{c.emoji || '⏳'}</span> {c.title}{' '}
-          <b>{c.days === 0 ? 'today!' : `${c.days} day${c.days === 1 ? '' : 's'}`}</b>
+          <b>{c.days === 0 ? t('today!') : c.days === 1 ? t('1 day') : t('{n} days', { n: c.days })}</b>
         </span>
       ))}
       {members.map((m) => {
@@ -135,10 +133,10 @@ export function CalendarView() {
   };
 
   const title = (() => {
-    if (mode === 'day') return format(cursor, 'EEEE, MMMM d');
-    if (mode === 'month') return format(cursor, 'MMMM yyyy');
+    if (mode === 'day') return dateLong(cursor);
+    if (mode === 'month') return monthYear(cursor);
     const last = addDays(range.end, -1);
-    return `${format(range.start, 'MMM d')} – ${format(last, isSameMonth(range.start, last) ? 'd' : 'MMM d')}`;
+    return `${dateShort(range.start)} – ${isSameMonth(range.start, last) ? format(last, 'd') : dateShort(last)}`;
   })();
 
   const openDay = (d: Date) => {
@@ -152,12 +150,12 @@ export function CalendarView() {
       <div className="view-head">
         <div className="nav-group">
           <button className="btn ghost" onClick={() => setCursor(startOfDay(new Date()))}>
-            Today
+            {t('Today')}
           </button>
-          <button className="icon-btn" onClick={() => step(-1)} aria-label="Previous">
+          <button className="icon-btn" onClick={() => step(-1)} aria-label={t('Previous')}>
             <ChevronLeft />
           </button>
-          <button className="icon-btn" onClick={() => step(1)} aria-label="Next">
+          <button className="icon-btn" onClick={() => step(1)} aria-label={t('Next')}>
             <ChevronRight />
           </button>
           <h1>{title}</h1>
@@ -167,7 +165,7 @@ export function CalendarView() {
           <div className="segmented">
             {MODES.map((m) => (
               <button key={m.id} className={mode === m.id ? 'on' : ''} onClick={() => setMode(m.id)}>
-                {m.label}
+                {t(m.label)}
               </button>
             ))}
           </div>
@@ -177,7 +175,7 @@ export function CalendarView() {
 
       {(haError || error) && (
         <div className="banner" onClick={reload}>
-          {haError ? `Home Assistant: ${haError}` : error} · tap to retry
+          {haError ? `Home Assistant: ${haError}` : error} · {t('tap to retry')}
         </div>
       )}
 
@@ -203,7 +201,7 @@ export function CalendarView() {
       <button
         className="fab"
         onClick={() => setAddOn(mode === 'day' ? cursor : new Date())}
-        aria-label="Add event"
+        aria-label={t('Add event')}
         disabled={calendars.length === 0}
       >
         <Plus size={26} />
@@ -240,7 +238,7 @@ function EventPill({ e, onPick, showTime = true }: { e: CalEvent; onPick: (e: Ca
         <span className="ev-title">{e.title}</span>
         {showTime && (
           <span className="ev-time">
-            {e.allDay ? 'All day' : `${fmtShortTime(e.start, clock24)} – ${fmtShortTime(e.end, clock24)}`}
+            {e.allDay ? t('All day') : `${fmtShortTime(e.start, clock24)} – ${fmtShortTime(e.end, clock24)}`}
           </span>
         )}
       </span>
@@ -331,10 +329,10 @@ function ScheduleView({
               </button>
               <div className="sched-sub">
                 <span className="muted">
-                  {sorted.length} event{sorted.length === 1 ? '' : 's'}
+                  {sorted.length === 1 ? t('1 event') : t('{n} events', { n: sorted.length })}
                 </span>
                 <button className="link add-link" onClick={() => onAdd(d)}>
-                  + Add event
+                  + {t('Add event')}
                 </button>
               </div>
             </header>
@@ -345,9 +343,9 @@ function ScheduleView({
         );
       })}
       <button className="sched-day next-week" onClick={onNext}>
-        <span className="day-label">Next week</span>
+        <span className="day-label">{t('Next week')}</span>
         <span className="muted">
-          {format(addDays(start, 7), 'MMMM d')} – {format(addDays(start, 13), 'd')}
+          {dateShort(addDays(start, 7))} – {dateShort(addDays(start, 13))}
         </span>
       </button>
     </div>
@@ -380,7 +378,7 @@ function MonthView({
               {sorted.slice(0, 3).map((e) => <CompactEvent key={e.id} e={e} onPick={onPick} />)}
               {sorted.length > 3 && (
                 <button className="more" onClick={() => onDay(d)}>
-                  +{sorted.length - 3} more
+                  {t('+{n} more', { n: sorted.length - 3 })}
                 </button>
               )}
             </div>
@@ -530,9 +528,9 @@ export function EventDetail({ event: e, onClose }: { event: CalEvent; onClose: (
           <Clock size={18} />
           {e.allDay
             ? isSameDay(e.start, lastDay)
-              ? format(e.start, 'EEEE, MMMM d') + ' · All day'
-              : `${format(e.start, 'EEE, MMM d')} – ${format(lastDay, 'EEE, MMM d')}`
-            : `${format(e.start, 'EEEE, MMMM d')} · ${fmtTime(e.start, settings.clock24)} – ${fmtTime(e.end, settings.clock24)}`}
+              ? dateLong(e.start) + ' · ' + t('All day')
+              : `${dateMedium(e.start)} – ${dateMedium(lastDay)}`
+            : `${dateLong(e.start)} · ${fmtTime(e.start, settings.clock24)} – ${fmtTime(e.end, settings.clock24)}`}
         </p>
         {e.location && (
           <p>
@@ -572,15 +570,15 @@ export function AddEvent({ defaultDate, onClose, onCreated }: { defaultDate: Dat
 
   const save = async () => {
     setErr(null);
-    if (!title.trim()) return setErr('Give the event a name.');
+    if (!title.trim()) return setErr(t('Give the event a name.'));
     const data: Record<string, string> = { entity_id: cal, summary: title.trim() };
     if (location.trim()) data.location = location.trim();
     if (allDay) {
-      if (endDate < date) return setErr('End date is before the start date.');
+      if (endDate < date) return setErr(t('End date is before the start date.'));
       data.start_date = date;
       data.end_date = format(addDays(parseISO(endDate), 1), 'yyyy-MM-dd');
     } else {
-      if (endT <= startT) return setErr('End time must be after the start time.');
+      if (endT <= startT) return setErr(t('End time must be after the start time.'));
       data.start_date_time = `${date} ${startT}:00`;
       data.end_date_time = `${date} ${endT}:00`;
     }
@@ -589,30 +587,30 @@ export function AddEvent({ defaultDate, onClose, onCreated }: { defaultDate: Dat
       await api.service('calendar', 'create_event', data);
       onCreated();
     } catch (e) {
-      setErr(`Couldn’t create the event: ${(e as Error).message}. Some calendars (like subscribed ICS feeds) are read-only.`);
+      setErr(t('Couldn’t create the event: {error}. Some calendars (like subscribed ICS feeds) are read-only.', { error: (e as Error).message }));
       setBusy(false);
     }
   };
 
   return (
     <Modal
-      title="New event"
+      title={t('New event')}
       onClose={onClose}
       footer={
         <>
           <button className="btn ghost" onClick={onClose}>
-            Cancel
+            {t('Cancel')}
           </button>
           <button className="btn primary" onClick={save} disabled={busy}>
-            {busy ? 'Saving…' : 'Add event'}
+            {busy ? t('Saving…') : t('Add event')}
           </button>
         </>
       }
     >
       <div className="form">
-        <input autoFocus className="big" placeholder="What’s happening?" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input autoFocus className="big" placeholder={t('What’s happening?')} value={title} onChange={(e) => setTitle(e.target.value)} />
         <label>
-          Calendar
+          {t('Calendar')}
           <div className="chips">
             {calendars
               .filter((c) => !settings.hiddenCalendars.includes(c.entity_id))
@@ -629,32 +627,32 @@ export function AddEvent({ defaultDate, onClose, onCreated }: { defaultDate: Dat
           </div>
         </label>
         <label className="row">
-          <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} /> All day
+          <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} /> {t('All day')}
         </label>
         <div className="row">
           <label>
-            {allDay ? 'Starts' : 'Date'}
+            {allDay ? t('Starts') : t('Date')}
             <input type="date" value={date} onChange={(e) => { setDate(e.target.value); if (e.target.value > endDate) setEndDate(e.target.value); }} />
           </label>
           {allDay ? (
             <label>
-              Ends
+              {t('Ends')}
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
             </label>
           ) : (
             <>
               <label>
-                From
+                {t('From')}
                 <input type="time" value={startT} onChange={(e) => setStartT(e.target.value)} />
               </label>
               <label>
-                To
+                {t('To')}
                 <input type="time" value={endT} onChange={(e) => setEndT(e.target.value)} />
               </label>
             </>
           )}
         </div>
-        <input placeholder="Location (optional)" value={location} onChange={(e) => setLocation(e.target.value)} />
+        <input placeholder={t('Location (optional)')} value={location} onChange={(e) => setLocation(e.target.value)} />
         {err && <p className="error">{err}</p>}
       </div>
     </Modal>

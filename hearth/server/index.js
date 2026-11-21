@@ -15,7 +15,7 @@ const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.3.0';
+const VERSION = process.env.HEARTH_VERSION || '0.4.0';
 
 // Add-on options (set on the add-on's Configuration tab in Home Assistant).
 let options = {};
@@ -120,7 +120,7 @@ const ENTITY_DOMAINS = [
 const haOrigin = () => (haBase ? haBase.replace(/\/api$/, '') : null);
 
 // ---------- JSON store ----------
-const STORE_KEYS = new Set(['members', 'chores', 'completions', 'meals', 'settings']);
+const STORE_KEYS = new Set(['members', 'chores', 'completions', 'meals', 'settings', 'timers']);
 let store = { rev: 0, data: {} };
 try {
   store = JSON.parse(fs.readFileSync(STORE_FILE, 'utf8'));
@@ -311,6 +311,17 @@ async function route(req, res) {
     const entry = Array.isArray(r.data) ? r.data.find((e) => e.state === 'loaded') ?? r.data[0] : null;
     return send(res, 200, { entry_id: entry?.entry_id ?? null });
   }
+  // Phones and other notify targets available in HA.
+  if (p === '/api/ha/notify_targets' && m === 'GET') {
+    return send(res, 200, await notifyTargets());
+  }
+  if (p === '/api/notify/test' && m === 'POST') {
+    const body = await readJson(req);
+    const targets = await notifyTargets();
+    if (!targets.includes(body.target)) return send(res, 400, { error: 'Unknown notify target' });
+    const r = await sendNotify([body.target], 'Hearth', 'Test notification from your family display 👋');
+    return send(res, r ? 200 : 502, { ok: r });
+  }
   match = p.match(/^\/api\/ha\/services\/([a-z_]+)\/([a-z_]+)$/);
   if (match && m === 'POST') {
     const svc = `${match[1]}.${match[2]}`;
@@ -391,6 +402,111 @@ const server = http.createServer((req, res) => {
     if (!res.headersSent) send(res, e.status || 502, { error: e.message || String(e) });
   });
 });
+
+
+// ---------- notifications (runs in the add-on, so phones get one alert, not one per tablet) ----------
+const pad2 = (n) => String(n).padStart(2, '0');
+const localKey = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const sent = new Set();
+
+async function notifyTargets() {
+  const r = await ha('GET', '/services');
+  if (r.status !== 200 || !Array.isArray(r.data)) return [];
+  const n = r.data.find((d) => d.domain === 'notify');
+  return Object.keys(n?.services ?? {})
+    .filter((s) => s !== 'send_message' && /^[a-z0-9_]+$/.test(s))
+    .map((s) => `notify.${s}`)
+    .sort();
+}
+
+async function sendNotify(targets, title, message) {
+  let ok = false;
+  for (const t of targets) {
+    const [domain, svc] = String(t).split('.');
+    if (domain !== 'notify' || !/^[a-z0-9_]+$/.test(svc || '')) continue;
+    try {
+      const r = await ha('POST', `/services/notify/${svc}`, { title, message });
+      ok = ok || r.status < 300;
+      if (r.status >= 300) console.warn(`[hearth] notify.${svc} failed: ${r.status}`);
+    } catch (e) {
+      console.warn(`[hearth] notify.${svc} failed:`, e.message);
+    }
+  }
+  return ok;
+}
+
+const notifySettings = () => store.data.settings?.notify ?? {};
+const fmtClock = (d) => {
+  const h24 = store.data.settings?.clock24;
+  return h24 ? `${pad2(d.getHours())}:${pad2(d.getMinutes())}` : `${d.getHours() % 12 || 12}:${pad2(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`;
+};
+
+function tickTimers() {
+  const n = notifySettings();
+  if (!n.targets?.length || n.timers === false) return;
+  for (const t of store.data.timers ?? []) {
+    if (t.pausedLeft != null || t.endsAt > Date.now()) continue;
+    const key = `timer:${t.id}:${t.endsAt}`;
+    if (sent.has(key) || Date.now() - t.endsAt > 5 * 60000) continue;
+    sent.add(key);
+    sendNotify(n.targets, '⏰ Timer done', `${t.label || 'Timer'} is done`);
+  }
+}
+
+async function tickMinute() {
+  const n = notifySettings();
+  if (!n.targets?.length) return;
+  const now = new Date();
+
+  // Event reminders N minutes ahead.
+  const ahead = Number(n.eventMinutes) || 0;
+  if (ahead > 0) {
+    try {
+      const cals = await ha('GET', '/calendars');
+      const hidden = new Set(store.data.settings?.hiddenCalendars ?? []);
+      const end = new Date(now.getTime() + (ahead + 1) * 60000);
+      for (const c of Array.isArray(cals.data) ? cals.data : []) {
+        if (hidden.has(c.entity_id)) continue;
+        const q = new URLSearchParams({ start: now.toISOString(), end: end.toISOString() });
+        const r = await ha('GET', `/calendars/${c.entity_id}?${q}`);
+        for (const e of Array.isArray(r.data) ? r.data : []) {
+          if (!e.start?.dateTime) continue; // skip all-day events
+          const start = new Date(e.start.dateTime);
+          const mins = (start - now) / 60000;
+          if (mins <= 0 || mins > ahead) continue;
+          const key = `event:${c.entity_id}:${e.uid ?? e.summary}:${start.getTime()}`;
+          if (sent.has(key)) continue;
+          sent.add(key);
+          sendNotify(n.targets, `📅 ${e.summary || 'Event'}`, `${fmtClock(start)}${e.location ? ` · ${e.location}` : ''} (in ${Math.round(mins)} min)`);
+        }
+      }
+    } catch (e) {
+      console.warn('[hearth] reminder check failed:', e.message);
+    }
+  }
+
+  // Daily "chores left" nudge at a set time.
+  if (n.choreTime && `${pad2(now.getHours())}:${pad2(now.getMinutes())}` === n.choreTime) {
+    const key = `chores:${localKey(now)}`;
+    if (!sent.has(key)) {
+      sent.add(key);
+      const done = new Set(store.data.completions?.[localKey(now)] ?? []);
+      const lines = (store.data.members ?? [])
+        .map((m) => {
+          const left = (store.data.chores ?? []).filter(
+            (c) => c.memberId === m.id && (!c.days?.length || c.days.includes(now.getDay())) && !done.has(c.id),
+          );
+          return left.length ? `${m.name}: ${left.map((c) => c.title).join(', ')}` : null;
+        })
+        .filter(Boolean);
+      if (lines.length) sendNotify(n.targets, '🧹 Chores left today', lines.join('\n'));
+    }
+  }
+  if (sent.size > 2000) sent.clear();
+}
+
+setInterval(tickTimers, 5000);
+setInterval(() => tickMinute().catch(() => undefined), 60000);
 
 server.listen(PORT, () => {
   console.log(`[hearth] v${VERSION} listening on :${PORT} (mode: ${mode})`);

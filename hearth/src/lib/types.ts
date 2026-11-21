@@ -52,6 +52,11 @@ export interface Settings {
   gridDays: 5 | 7;
   familyName: string;
   countdowns: Countdown[];
+  notify: NotifySettings;
+  /** Color palette; see lib/themes.ts */
+  palette: string;
+  /** 'auto' follows the device language */
+  language: string;
   choreLayout: 'cards' | 'compact';
 }
 
@@ -64,12 +69,35 @@ export interface Countdown {
 
 export type CalendarViewMode = 'day' | 'week' | 'schedule' | 'grid' | 'month';
 
+export interface Timer {
+  id: string;
+  label: string;
+  emoji: string;
+  duration: number; // ms
+  endsAt: number; // epoch ms
+  /** Set while paused: ms left. */
+  pausedLeft?: number;
+}
+
+export interface NotifySettings {
+  /** notify.* services to send to (phones etc.) */
+  targets: string[];
+  /** Remind this many minutes before timed events; 0 = off */
+  eventMinutes: number;
+  timers: boolean;
+  /** HH:mm for the daily chores-left nudge; '' = off */
+  choreTime: string;
+  /** Show reminders on the wall display too */
+  screen: boolean;
+}
+
 export interface StoreData {
   members: Member[];
   chores: Chore[];
   completions: Completions;
   meals: Meals;
   settings: Settings;
+  timers: Timer[];
 }
 
 export interface CalendarInfo {

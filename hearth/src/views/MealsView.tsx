@@ -1,10 +1,11 @@
-import { addDays, addWeeks, format, isToday, startOfWeek } from 'date-fns';
+import { addDays, addWeeks, isToday, startOfWeek } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { useGrocy } from '../lib/grocy';
 import { useStore } from '../lib/store';
 import type { MealType } from '../lib/types';
 import { dateKey } from '../lib/util';
+import { dateShort, format, t } from '../lib/i18n';
 
 const MEALS: { key: MealType; label: string; icon: string }[] = [
   { key: 'breakfast', label: 'Breakfast', icon: '🥣' },
@@ -49,13 +50,13 @@ export function MealsView() {
     <div className="meals">
       <div className="view-head">
         <div className="nav-group">
-          <button className="icon-btn" onClick={() => setWeekStart((w) => addWeeks(w, -1))} aria-label="Previous week">
+          <button className="icon-btn" onClick={() => setWeekStart((w) => addWeeks(w, -1))} aria-label={t('Previous week')}>
             <ChevronLeft />
           </button>
-          <button className="icon-btn" onClick={() => setWeekStart((w) => addWeeks(w, 1))} aria-label="Next week">
+          <button className="icon-btn" onClick={() => setWeekStart((w) => addWeeks(w, 1))} aria-label={t('Next week')}>
             <ChevronRight />
           </button>
-          <h1>Meals · {format(weekStart, 'MMM d')}</h1>
+          <h1>{t('Meals')} · {dateShort(weekStart)}</h1>
         </div>
       </div>
       <div className="meal-grid">
@@ -70,7 +71,7 @@ export function MealsView() {
           <div key={m.key} className="meal-row">
             <div className="meal-label">
               <span>{m.icon}</span>
-              {m.label}
+              {t(m.label)}
             </div>
             {days.map((d) => {
               const k = dateKey(d);

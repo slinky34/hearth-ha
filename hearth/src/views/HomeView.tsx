@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import type { HaState } from '../lib/types';
+import { t } from '../lib/i18n';
 
 export const CONTROL_DOMAINS = ['light', 'switch', 'fan', 'input_boolean', 'scene', 'script', 'sensor', 'binary_sensor', 'climate'];
 const TOGGLES = ['light', 'switch', 'fan', 'input_boolean'];
@@ -20,12 +21,12 @@ function describe(s: HaState) {
       motion: ['Motion', 'Clear'], occupancy: ['Occupied', 'Clear'], moisture: ['Wet', 'Dry'], lock: ['Unlocked', 'Locked'],
     };
     const w = words[a.device_class] ?? ['On', 'Off'];
-    return open ? w[0] : w[1];
+    return t(open ? w[0] : w[1]);
   }
   if (d === 'climate') return `${a.current_temperature ?? '–'}° · ${s.state}`;
-  if (d === 'scene' || d === 'script') return 'Tap to run';
+  if (d === 'scene' || d === 'script') return t('Tap to run');
   if (d === 'light' && s.state === 'on' && a.brightness) return `${Math.round((a.brightness / 255) * 100)}%`;
-  return s.state === 'on' ? 'On' : s.state === 'off' ? 'Off' : s.state;
+  return s.state === 'on' ? t('On') : s.state === 'off' ? t('Off') : s.state;
 }
 
 function Icon({ s }: { s: HaState }) {
@@ -83,10 +84,10 @@ export function HomeView() {
   return (
     <div className="home">
       <div className="view-head">
-        <h1>Home</h1>
+        <h1>{t('Home')}</h1>
       </div>
       {controls.length === 0 ? (
-        <div className="empty">Pick lights, switches, scenes, and sensors to show here in Settings → Home controls.</div>
+        <div className="empty">{t('Pick lights, switches, scenes, and sensors to show here in Settings → Home controls.')}</div>
       ) : (
         <div className="control-grid">
           {ordered.map((s) => {
@@ -104,7 +105,7 @@ export function HomeView() {
                   <Icon s={s} />
                 </span>
                 <span className="control-name">{s.attributes.friendly_name ?? s.entity_id}</span>
-                <span className="control-state">{s.state === 'unavailable' ? 'Unavailable' : describe(s)}</span>
+                <span className="control-state">{s.state === 'unavailable' ? t('Unavailable') : describe(s)}</span>
               </button>
             );
           })}

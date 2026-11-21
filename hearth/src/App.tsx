@@ -10,6 +10,10 @@ import { KioskProvider, enterFullscreen, useKiosk } from './lib/kiosk';
 import { MusicProvider } from './lib/music';
 import { StoreProvider, useStore } from './lib/store';
 import { WeatherProvider } from './lib/weather';
+import { applyPalette } from './lib/themes';
+import { setLanguage, t } from './lib/i18n';
+import { TimerAlarm } from './components/Timers';
+import { Reminders } from './components/Reminders';
 import { CalendarView } from './views/CalendarView';
 import { ChoresView } from './views/ChoresView';
 import { HomeView } from './views/HomeView';
@@ -34,18 +38,14 @@ const TABS = [
 type Tab = (typeof TABS)[number]['id'] | 'settings';
 const ALL_TABS: string[] = [...TABS.map((t) => t.id), 'settings'];
 
-function useTheme(theme: 'light' | 'dark' | 'auto') {
+function useTheme(theme: 'light' | 'dark' | 'auto', palette: string) {
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const apply = () => {
-      const dark = theme === 'dark' || (theme === 'auto' && mq.matches);
-      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-      document.querySelector('meta[name=theme-color]')?.setAttribute('content', dark ? '#121521' : '#FBF8F4');
-    };
+    const apply = () => applyPalette(palette, theme === 'dark' || (theme === 'auto' && mq.matches));
     apply();
     mq.addEventListener('change', apply);
     return () => mq.removeEventListener('change', apply);
-  }, [theme]);
+  }, [theme, palette]);
 }
 
 /** Asks for the kiosk PIN (if one is set) before leaving kiosk mode. */
@@ -66,22 +66,22 @@ function ExitKiosk({ onClose }: { onClose: () => void }) {
   };
   return (
     <Modal
-      title="Leave kiosk mode?"
+      title={t('Leave kiosk mode?')}
       onClose={onClose}
       footer={
         <>
           <button className="btn ghost" onClick={onClose}>
-            Cancel
+            {t('Cancel')}
           </button>
           <button className="btn primary" onClick={unlock}>
-            Unlock
+            {t('Unlock')}
           </button>
         </>
       }
     >
       <div className="form">
         <p className="muted" style={{ margin: 0 }}>
-          This unlocks Settings and editing on this screen.
+          {t('This unlocks Settings and editing on this screen.')}
         </p>
         {pinSet && (
           <input
@@ -98,7 +98,7 @@ function ExitKiosk({ onClose }: { onClose: () => void }) {
             onKeyDown={(e) => e.key === 'Enter' && unlock()}
           />
         )}
-        {err && <p className="error">Wrong PIN.</p>}
+        {err && <p className="error">{t('Wrong PIN.')}</p>}
       </div>
     </Modal>
   );
@@ -114,7 +114,7 @@ function Shell() {
   const [idle, setIdle] = useIdle(data.settings.screensaverMinutes);
   const [exiting, setExiting] = useState(false);
   const press = useRef(0);
-  useTheme(data.settings.theme);
+  useTheme(data.settings.theme, data.settings.palette);
 
   useEffect(() => {
     history.replaceState(null, '', `${location.search}#${tab}`);
@@ -145,38 +145,38 @@ function Shell() {
           onPointerDown={logoDown}
           onPointerUp={logoUp}
           onPointerLeave={logoUp}
-          title={kiosk ? 'Hold to leave kiosk mode' : undefined}
+          title={kiosk ? t('Hold to leave kiosk mode') : undefined}
         >
           🏡
         </div>
         {TABS.map(({ id, label, Icon }) => (
           <button key={id} className={`rail-btn ${tab === id ? 'on' : ''}`} onClick={() => setTab(id)}>
             <Icon size={26} />
-            <span>{label}</span>
+            <span>{t(label)}</span>
           </button>
         ))}
         <div className="grow" />
         {kiosk ? (
           <button className="rail-btn" onClick={() => setExiting(true)} title="Kiosk mode is on">
             <Lock size={22} />
-            <span>Locked</span>
+            <span>{t('Locked')}</span>
           </button>
         ) : (
           <>
             <button className="rail-btn full" onClick={enterFullscreen} title="Fullscreen">
               <Maximize size={22} />
-              <span>Full</span>
+              <span>{t('Full')}</span>
             </button>
             <button className={`rail-btn ${tab === 'settings' ? 'on' : ''}`} onClick={() => setTab('settings')}>
               <Gear size={26} />
-              <span>Settings</span>
+              <span>{t('Settings')}</span>
             </button>
           </>
         )}
       </nav>
       <main>
         <TopBar onMusic={() => setTab('music')} />
-        {saveError && <div className="banner">Couldn’t save changes: {saveError}</div>}
+        {saveError && <div className="banner">{t('Couldn’t save changes')}: {saveError}</div>}
         <div className="view">
           {tab === 'today' && <TodayView />}
           {tab === 'calendar' && <CalendarView />}
@@ -191,8 +191,16 @@ function Shell() {
       </main>
       {idle && <Screensaver onClose={() => setIdle(false)} />}
       {exiting && <ExitKiosk onClose={() => setExiting(false)} />}
+      <Reminders />
+      <TimerAlarm />
     </div>
   );
+}
+
+/** Sets the UI language before anything renders, and remounts the app when it changes. */
+function LanguageGate() {
+  const lang = setLanguage(useStore().data.settings.language);
+  return <Shell key={lang} />;
 }
 
 export default function App() {
@@ -202,7 +210,7 @@ export default function App() {
         <HaProvider>
           <WeatherProvider>
             <MusicProvider>
-              <Shell />
+              <LanguageGate />
             </MusicProvider>
           </WeatherProvider>
         </HaProvider>

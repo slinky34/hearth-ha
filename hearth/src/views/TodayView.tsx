@@ -7,6 +7,7 @@ import { useStore } from '../lib/store';
 import type { CalEvent, Chore, Member } from '../lib/types';
 import { dateKey, dueOn, fmtTime, initials, pastel, stripes } from '../lib/util';
 import { AddEvent, EventDetail, MemberStrip } from './CalendarView';
+import { t } from '../lib/i18n';
 
 export function TodayView() {
   const { data, set } = useStore();
@@ -45,7 +46,7 @@ export function TodayView() {
         <span className="today-cal">{calName(e.calendar)}</span>
         <span className="today-title">{e.title}</span>
         <span className="today-time">
-          {e.allDay ? 'All day' : `${fmtTime(e.start, settings.clock24)} - ${fmtTime(e.end, settings.clock24)}`}
+          {e.allDay ? t('All day') : `${fmtTime(e.start, settings.clock24)} - ${fmtTime(e.end, settings.clock24)}`}
           {e.location ? ` · ${e.location}` : ''}
         </span>
       </button>
@@ -72,7 +73,7 @@ export function TodayView() {
   };
 
   const fab = (
-    <button className="fab" onClick={() => setAdding(true)} aria-label="Add event" disabled={calendars.length === 0}>
+    <button className="fab" onClick={() => setAdding(true)} aria-label={t('Add event')} disabled={calendars.length === 0}>
       <Plus size={26} />
     </button>
   );
@@ -106,7 +107,7 @@ export function TodayView() {
                 <span className="avatar" style={{ background: 'var(--accent)' }}>
                   🏡
                 </span>
-                <h2>{settings.familyName || 'Family'}</h2>
+                <h2>{settings.familyName || t('Family')}</h2>
               </header>
               <div className="person-events">{shared.map(card)}</div>
             </section>
@@ -116,7 +117,7 @@ export function TodayView() {
             const tasks = chores.filter((c) => c.memberId === m.id && dueOn(c, today));
             const n = tasks.filter((c) => done.has(c.id)).length;
             return (
-              <section key={m.id} className="person-col" style={{ background: pastel(m.color, 0.12) }}>
+              <section key={m.id} className="person-col" style={{ ['--member' as string]: m.color }}>
                 <header className="person-head">
                   <span className="avatar" style={{ background: m.color }}>
                     {initials(m.name)}
@@ -130,11 +131,11 @@ export function TodayView() {
                 </header>
                 <div className="person-events">
                   {mine.map(card)}
-                  {!loading && mine.length === 0 && <p className="today-empty small">No events today</p>}
+                  {!loading && mine.length === 0 && <p className="today-empty small">{t('No events today')}</p>}
                 </div>
                 {tasks.length > 0 && (
                   <div className="person-tasks">
-                    <h3 className="today-label">Tasks</h3>
+                    <h3 className="today-label">{t('Tasks')}</h3>
                     {tasks.map((c) => taskRow(c, m, false))}
                   </div>
                 )}
@@ -156,16 +157,16 @@ export function TodayView() {
   return (
     <div className="today-view">
       <section className="today-main">
-        <h2 className="today-heading">Today</h2>
+        <h2 className="today-heading">{t('Today')}</h2>
         <div className="today-events">
           {sorted.map(card)}
-          {!loading && sorted.length === 0 && <p className="today-empty">Nothing on the calendar today.</p>}
+          {!loading && sorted.length === 0 && <p className="today-empty">{t('Nothing on the calendar today.')}</p>}
         </div>
       </section>
       <aside className="today-tasks">
-        <h3 className="today-label">Tasks</h3>
+        <h3 className="today-label">{t('Tasks')}</h3>
         {tasks.length === 0 ? (
-          <p className="today-empty">No tasks for today — enjoy the free time</p>
+          <p className="today-empty">{t('No tasks for today — enjoy the free time')}</p>
         ) : (
           <div className="today-task-list">{tasks.map(({ chore, member }) => taskRow(chore, member, shownMembers.length > 1))}</div>
         )}

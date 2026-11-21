@@ -1,4 +1,4 @@
-import { addDays, format, startOfDay } from 'date-fns';
+import { addDays, startOfDay } from 'date-fns';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import { useEvents, useHa } from '../lib/ha';
@@ -8,6 +8,7 @@ import { fmtShortTime } from '../lib/util';
 import { useWeather, weatherIcon } from '../lib/weather';
 import { usePhotos } from './PhotosView';
 import { isActive, useMusic } from '../lib/music';
+import { dateLong, format } from '../lib/i18n';
 
 function shuffle<T>(a: T[]) {
   const b = [...a];
@@ -60,7 +61,7 @@ export function Screensaver({ onClose }: { onClose: () => void }) {
       <div className="ss-overlay">
         <div>
           <div className="ss-time">{format(now, settings.clock24 ? 'HH:mm' : 'h:mm')}</div>
-          <div className="ss-date">{format(now, 'EEEE, MMMM d')}</div>
+          <div className="ss-date">{dateLong(now)}</div>
         </div>
         <div className="ss-side">
           {weather && (
