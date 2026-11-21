@@ -7,6 +7,7 @@ import { LANGUAGES, t } from '../lib/i18n';
 import { PALETTES, swatch } from '../lib/themes';
 import { CONTROL_DOMAINS } from './HomeView';
 import { EntityPicker } from '../components/EntityPicker';
+import { Section } from '../components/Section';
 import { Integrations } from '../components/Integrations';
 import { useStore } from '../lib/store';
 import type { Member, Settings } from '../lib/types';
@@ -42,8 +43,7 @@ export function SettingsView() {
         <h1>{t('Settings')}</h1>
       </div>
 
-      <section className="card">
-        <h2>{t('Family')}</h2>
+      <Section id="family" title={t('Family')} summary={t('{n} people', { n: members.length })}>
         <p className="muted small">
           {t('Link each person to their calendars to color-code their events. Calendars not linked to anyone are treated as shared and always shown.')}
         </p>
@@ -113,10 +113,9 @@ export function SettingsView() {
         >
           <Plus size={18} /> {t('Add person')}
         </button>
-      </section>
+      </Section>
 
-      <section className="card">
-        <h2>{t('Calendars')}</h2>
+      <Section id="calendars" title={t('Calendars')} summary={t('{n} found', { n: calendars.length })}>
         {error && <p className="error">Home Assistant: {error}</p>}
         {calendars.length === 0 && !error && <p className="muted">{t('No calendar entities found in Home Assistant.')}</p>}
         {calendars.map((c) => {
@@ -156,10 +155,9 @@ export function SettingsView() {
             </div>
           );
         })}
-      </section>
+      </Section>
 
-      <section className="card">
-        <h2>{t('Lists')}</h2>
+      <Section id="lists" title={t('Lists')} summary={settings.lists.length ? t('{n} chosen', { n: settings.lists.length }) : t('All lists')}>
         <p className="muted small">{t('Choose which Home Assistant to-do lists appear. None selected shows all of them.')}</p>
         <EntityPicker
           entities={todos}
@@ -168,10 +166,9 @@ export function SettingsView() {
           placeholder={t('Search lists…')}
           emptyHint={todos.length ? t('Showing every list.') : t('No to-do entities found.')}
         />
-      </section>
+      </Section>
 
-      <section className="card">
-        <h2>{t('Display')}</h2>
+      <Section id="display" title={t('Display')}>
         <div className="settings-grid">
           <label>
             {t('Weather')}
@@ -233,10 +230,9 @@ export function SettingsView() {
             </select>
           </label>
         </div>
-      </section>
+      </Section>
 
-      <section className="card">
-        <h2>{t('Look & language')}</h2>
+      <Section id="look-language" title={t('Look & language')} summary={PALETTES.find((x) => x.id === settings.palette)?.name}>
         <div className="palette-grid">
           {PALETTES.map((p) => {
             const sw = swatch(p, isDark);
@@ -276,10 +272,9 @@ export function SettingsView() {
             </select>
           </label>
         </div>
-      </section>
+      </Section>
 
-      <section className="card">
-        <h2>{t('Notifications')}</h2>
+      <Section id="notifications" title={t('Notifications')} summary={settings.notify.targets.length ? t('{n} phones', { n: settings.notify.targets.length }) : undefined}>
         <div className="settings-grid">
           <label>
             {t('Remind before events')}
@@ -328,10 +323,9 @@ export function SettingsView() {
             <input type="time" value={settings.notify.choreTime} onChange={(e) => n({ choreTime: e.target.value })} />
           </label>
         </div>
-      </section>
+      </Section>
 
-      <section className="card">
-        <h2>{t('Calendar')}</h2>
+      <Section id="calendar" title={t('Calendar')}>
         <div className="settings-grid">
           <label>
             {t('Family name (shown in the header)')}
@@ -372,10 +366,9 @@ export function SettingsView() {
             <Plus size={18} /> {t('Add countdown')}
           </button>
         </div>
-      </section>
+      </Section>
 
-      <section className="card">
-        <h2>{t('Music')}</h2>
+      <Section id="music" title={t('Music')} summary={settings.musicPlayers.length ? t('{n} chosen', { n: settings.musicPlayers.length }) : t('All speakers')}>
         <p className="muted small">{t('Speakers to show. None selected shows every media player (Sonos, Music Assistant, Cast, Spotify…).')}</p>
         <EntityPicker
           entities={players}
@@ -384,10 +377,9 @@ export function SettingsView() {
           placeholder={t('Search speakers…')}
           emptyHint={players.length ? t('Showing every speaker.') : t('No media players found.')}
         />
-      </section>
+      </Section>
 
-      <section className="card">
-        <h2>{t('Home controls')}</h2>
+      <Section id="home-controls" title={t('Home controls')} summary={t('{n} chosen', { n: settings.controls.length })}>
         <p className="muted small">
           {t('Lights, switches, fans, scenes, scripts, and sensors for the Home screen. Locks, alarms, and garage doors are intentionally not controllable from a wall display.')}
         </p>
@@ -398,18 +390,16 @@ export function SettingsView() {
           placeholder={t('Search entities…')}
           emptyHint={t('Search above to add entities.')}
         />
-      </section>
+      </Section>
 
-      <section className="card">
-        <h2>{t('Photos')}</h2>
+      <Section id="photos" title={t('Photos')}>
         <p className="muted small">
           {t('Showing photos from {dir} and its subfolders.', { dir: photoDir || '…' })}{' '}
           {t('To use a different folder, change Photo folder on the Hearth add-on’s Configuration tab (anything under /media or /share, e.g. /media/Photos/Family), then restart the add-on.')}
         </p>
-      </section>
+      </Section>
 
-      <section className="card">
-        <h2>{t('Kiosk mode')}</h2>
+      <Section id="kiosk-mode" title={t('Kiosk mode')}>
         <p className="muted small">
           {t('For a wall tablet: goes fullscreen (hiding Home Assistant’s sidebar too), keeps the screen awake, hides the cursor, and locks Settings, chore editing, and photo deletion. It only applies to this screen. To leave, hold the 🏡 logo for 2 seconds or tap Locked. You can also add ?kiosk to the end of its address to turn it on.')}
         </p>
@@ -429,18 +419,17 @@ export function SettingsView() {
             <Lock size={18} /> {t('Turn on kiosk mode on this screen')}
           </button>
         </div>
-      </section>
+      </Section>
 
       <Integrations />
 
-      <section className="card">
-        <h2>{t('About')}</h2>
+      <Section id="about" title={t('About')}>
         <p className="muted">
           {mode === 'addon' && t('Connected to Home Assistant (add-on).')}
           {mode === 'remote' && t('Connected to Home Assistant via HA_URL.')}
           {mode === 'demo' && t('Demo mode: showing sample calendars, lists, and weather. Run as a Home Assistant add-on, or set HA_URL and HA_TOKEN, to use your real data.')}
         </p>
-      </section>
+      </Section>
     </div>
   );
 }

@@ -37,7 +37,8 @@ type Source = 'mealie' | 'bar';
 
 export function RecipesView({ openSlug, onOpened }: { openSlug?: string | null; onOpened?: () => void }) {
   const [mealie, setMealie] = useState<'loading' | 'missing' | 'ready'>('loading');
-  const [bar, setBar] = useState<'loading' | 'missing' | 'ready'>('loading');
+  const [bar, setBar] = useState<'loading' | 'missing' | 'error' | 'ready'>('loading');
+  const [barErr, setBarErr] = useState('');
   const [source, setSource] = useState<Source>('mealie');
   const [images, setImages] = useState(false);
   const [plan, setPlan] = useState<PlanEntry[]>([]);
@@ -58,14 +59,22 @@ export function RecipesView({ openSlug, onOpened }: { openSlug?: string | null; 
         setMealie('missing');
       }
     })();
-    barCocktails('')
-      .then(() => setBar('ready'))
+    fetch('api/bar/status')
+      .then((r) => r.json())
+      .then((st: { configured: boolean; ok: boolean; error?: string }) => {
+        if (!st.configured) return setBar('missing');
+        if (!st.ok) {
+          setBarErr(st.error ?? '');
+          return setBar('error');
+        }
+        setBar('ready');
+      })
       .catch(() => setBar('missing'));
   }, []);
 
   // Start on cocktails when Mealie isn't set up but Bar Assistant is.
   useEffect(() => {
-    if (mealie === 'missing' && bar === 'ready') setSource('bar');
+    if (mealie === 'missing' && (bar === 'ready' || bar === 'error')) setSource('bar');
   }, [mealie, bar]);
 
   useEffect(() => {
@@ -106,7 +115,7 @@ export function RecipesView({ openSlug, onOpened }: { openSlug?: string | null; 
       </div>
     );
 
-  const both = mealie === 'ready' && bar === 'ready';
+  const both = mealie === 'ready' && (bar === 'ready' || bar === 'error');
   return (
     <div className="recipes">
       <div className="view-head">
@@ -151,7 +160,11 @@ export function RecipesView({ openSlug, onOpened }: { openSlug?: string | null; 
 
         <section>
           <h3 className="today-label">{q ? t('Results') : source === 'bar' ? t('Cocktails') : t('All recipes')}</h3>
-          {noSearch ? (
+          {source === 'bar' && bar === 'error' ? (
+            <div className="banner static">
+              <b>{t('Couldn’t reach Bar Assistant.')}</b> {barErr}
+            </div>
+          ) : noSearch ? (
             <p className="muted">
               {source === 'bar'
                 ? t('Couldn’t reach Bar Assistant.')

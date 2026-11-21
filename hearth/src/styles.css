@@ -727,3 +727,18 @@ h3.sub { margin-top: 8px; }
 .todo-row:hover .item-edit, .item-edit:focus { opacity: 1; }
 .todo-edit { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--border); }
 .todo-edit input { flex: 1; min-height: 40px; padding: 8px 12px; }
+
+.banner.static { margin: 0; cursor: default; line-height: 1.5; }
+.int-status.problem { background: #fdecea; color: #b3261e; }
+[data-theme='dark'] .int-status.problem { background: #3a2224; color: #f3b1ad; }
+
+/* collapsible settings sections */
+.settings .card.collapsible { padding: 0; gap: 0; }
+.section-head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 18px 20px; text-align: left; border-radius: var(--radius); }
+.section-head h2 { flex: 0 1 auto; }
+.section-summary { flex: 1; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.section-chevron { color: var(--muted); transition: transform .2s; flex-shrink: 0; margin-left: auto; }
+.section-summary + .section-chevron { margin-left: 0; }
+.collapsible.open .section-chevron { transform: rotate(180deg); }
+.section-body { display: flex; flex-direction: column; gap: 12px; padding: 0 20px 20px; }
+.settings { gap: 12px; }

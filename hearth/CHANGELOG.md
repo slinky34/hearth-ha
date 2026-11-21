@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1
+- **Bar Assistant fix:** Hearth now finds the API itself, whether it's at `/api`, `/bar/api` (the usual Docker setup with the Salt Rim web app), or the address as entered. Connection problems now show on the Cocktails tab, in Settings → Integrations, and in the add-on log, instead of the tab just not appearing.
+- **Collapsible Settings:** every section folds up, with a short summary when closed. Each screen remembers which sections are open.
+
 ## 0.8.0
 - **Edit and delete events:** tap an event, then Edit or Delete.
   - Edit reopens the form pre-filled, so you can change the title, time, location, calendars, or who's going.

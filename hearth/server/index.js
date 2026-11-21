@@ -15,7 +15,7 @@ const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.8.0';
+const VERSION = process.env.HEARTH_VERSION || '0.8.1';
 
 // Add-on options (set on the add-on's Configuration tab in Home Assistant).
 let options = {};
@@ -394,6 +394,7 @@ async function route(req, res) {
     return send(res, 200, Buffer.from(await img.arrayBuffer()), { 'Content-Type': img.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'max-age=3600' });
   }
   // --- Bar Assistant (cocktails) ---
+  if (p === '/api/bar/status' && m === 'GET') return send(res, 200, await barStatus());
   if (p === '/api/bar/cocktails' && m === 'GET') {
     const q = (url.searchParams.get('q') || '').trim();
     if (!BAR.url) return mock ? send(res, 200, mock.cocktails(q)) : send(res, 404, { error: 'Bar Assistant is not set up' });
@@ -468,7 +469,7 @@ async function route(req, res) {
       counts: { calendar: count('calendar'), todo: count('todo'), weather: count('weather'), media_player: count('media_player'), notify: targets.length },
       grocy: domains.has('grocy') || st.some((x) => x.entity_id.startsWith('sensor.grocy_')),
       taskmate: domains.has('taskmate') || st.some((x) => x.entity_id.endsWith('_overview') && Array.isArray(x.attributes?.children)),
-      barAssistant: Boolean(BAR.url) || Boolean(mock),
+      barAssistant: await barStatus(),
       mealieImages: Boolean(MEALIE_URL) || Boolean(mock),
     });
   }
@@ -596,10 +597,33 @@ const server = http.createServer((req, res) => {
 let homeLoc = null;
 
 // ---------- Bar Assistant ----------
-const barApi = () => (BAR.url.endsWith('/api') ? BAR.url : `${BAR.url}/api`);
+// Bar Assistant installs differ: the API may live at /api, /bar/api (behind Salt Rim), or the address itself.
+let barBase = null;
+async function barApiBase() {
+  if (barBase) return barBase;
+  const root = BAR.url.replace(/\/api$/, '');
+  const candidates = [...new Set([BAR.url.endsWith('/api') ? BAR.url : null, `${root}/api`, `${root}/bar/api`, root].filter(Boolean))];
+  const tried = [];
+  for (const base of candidates) {
+    try {
+      const r = await fetch(`${base}/server/version`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
+      const ct = r.headers.get('content-type') || '';
+      if (ct.includes('json')) {
+        barBase = base;
+        console.log(`[hearth] Bar Assistant API found at ${base}`);
+        return base;
+      }
+      tried.push(`${base} (${r.status}, not the API)`);
+    } catch (e) {
+      tried.push(`${base} (${e.cause?.code || e.message})`);
+    }
+  }
+  throw Object.assign(new Error(`Couldn’t find the Bar Assistant API. Check the address. Tried: ${tried.join('; ')}`), { status: 502 });
+}
 let barIdCache = BAR.barId || null;
 async function barFetch(path_, withBar) {
-  const res = await fetch(barApi() + path_, {
+  const base = await barApiBase();
+  const res = await fetch(base + path_, {
     headers: {
       Authorization: `Bearer ${BAR.token}`,
       Accept: 'application/json',
@@ -612,8 +636,10 @@ async function barFetch(path_, withBar) {
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
-    data = { message: text.slice(0, 200) };
+    throw Object.assign(new Error('Bar Assistant sent back a web page instead of data. Check the address.'), { status: 502 });
   }
+  if (res.status === 401) throw Object.assign(new Error('Bar Assistant rejected the token. Create a new personal access token and paste it into the add-on options.'), { status: 502 });
+  if (res.status === 403) throw Object.assign(new Error('The Bar Assistant token isn’t allowed to read cocktails. Create a token with read access.'), { status: 502 });
   if (!res.ok) throw Object.assign(new Error(`Bar Assistant: ${data?.message || res.status}`), { status: 502 });
   return data;
 }
@@ -621,9 +647,21 @@ async function bar(path_) {
   if (!barIdCache) {
     const bars = await barFetch('/bars', false);
     barIdCache = String(bars.data?.[0]?.id ?? '');
-    if (!barIdCache) throw Object.assign(new Error('No bars found in Bar Assistant'), { status: 502 });
+    if (!barIdCache) throw Object.assign(new Error('No bars found in Bar Assistant. Create one (or join one) in Bar Assistant first.'), { status: 502 });
   }
   return barFetch(path_, true);
+}
+/** Connection check for Settings / Recipes. */
+async function barStatus() {
+  if (!BAR.url) return mock ? { configured: true, ok: true } : { configured: false, ok: false };
+  if (!BAR.token) return { configured: true, ok: false, error: 'Add your Bar Assistant API token in the add-on options.' };
+  try {
+    await bar('/cocktails?per_page=1');
+    return { configured: true, ok: true, base: barBase, bar: barIdCache };
+  } catch (e) {
+    console.warn('[hearth] Bar Assistant:', e.message);
+    return { configured: true, ok: false, error: e.message };
+  }
 }
 const barImage = (c) => {
   const img = c.images?.[0] ?? c.main_image ?? null;
