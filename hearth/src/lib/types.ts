@@ -57,6 +57,8 @@ export interface Settings {
   palette: string;
   /** 'auto' follows the device language */
   language: string;
+  /** Immich photo sources (albums by id, plus favorites). */
+  immich: { albums: string[]; favorites: boolean };
   choreLayout: 'cards' | 'compact';
 }
 

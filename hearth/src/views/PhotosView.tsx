@@ -66,7 +66,8 @@ export function PhotosView({ onSlideshow }: { onSlideshow: () => void }) {
           {photos.map((p) => (
             <figure key={p}>
               <img src={api.photoUrl(p)} loading="lazy" alt="" />
-              {manage && !kiosk && (
+              {p.startsWith('immich:') && <span className="photo-source">Immich</span>}
+              {manage && !kiosk && !p.startsWith('immich:') && (
                 <button
                   className="icon-btn filled danger"
                   aria-label={t('Delete photo')}

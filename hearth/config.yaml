@@ -1,5 +1,5 @@
 name: Hearth
-version: "0.9.1"
+version: "0.10.0"
 slug: hearth
 description: Family wall calendar, chores, lists, meal plan, and photo frame for wall-mounted tablets
 url: https://github.com/slinky34/hearth-ha
@@ -27,9 +27,13 @@ options:
   bar_assistant_url: ""
   bar_assistant_token: ""
   bar_assistant_bar_id: ""
+  immich_url: ""
+  immich_api_key: ""
 schema:
   photo_directory: str
   mealie_url: str?
   bar_assistant_url: str?
   bar_assistant_token: password?
   bar_assistant_bar_id: str?
+  immich_url: str?
+  immich_api_key: password?

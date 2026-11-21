@@ -9,6 +9,7 @@ import { CONTROL_DOMAINS } from './HomeView';
 import { EntityPicker } from '../components/EntityPicker';
 import { Section } from '../components/Section';
 import { Integrations } from '../components/Integrations';
+import { ImmichSettings } from '../components/ImmichSettings';
 import { useStore } from '../lib/store';
 import type { Member, Settings } from '../lib/types';
 import { PALETTE, initials, uid } from '../lib/util';
@@ -392,11 +393,12 @@ export function SettingsView() {
         />
       </Section>
 
-      <Section id="photos" title={t('Photos')}>
+      <Section id="photos" title={t('Photos')} summary={settings.immich.albums.length ? t('{n} Immich albums', { n: settings.immich.albums.length }) : undefined}>
         <p className="muted small">
           {t('Showing photos from {dir} and its subfolders.', { dir: photoDir || '…' })}{' '}
           {t('To use a different folder, change Photo folder on the Hearth add-on’s Configuration tab (anything under /media or /share, e.g. /media/Photos/Family), then restart the add-on.')}
         </p>
+        <ImmichSettings />
       </Section>
 
       <Section id="kiosk-mode" title={t('Kiosk mode')}>

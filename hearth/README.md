@@ -27,6 +27,7 @@ All integrations go through Home Assistant, so there are no extra logins in Hear
 | TaskMate | link a child's to-do list to a person on the Tasks screen |
 | Mealie | meal plan, recipe search, cook mode, add to plan |
 | Bar Assistant (direct, with an API token) | cocktail recipes and mixing mode |
+| Immich (direct, with an API key) | photos from chosen albums and favorites |
 | Grocy (custom-components/grocy) | shopping list, chores, expiring products, meal plan |
 | Media players / Music Assistant | now playing, controls, playlists |
 | Weather | current conditions and forecast |

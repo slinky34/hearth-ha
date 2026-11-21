@@ -19,3 +19,5 @@ To use Hearth on a tablet that isn't signed in to HA, set a host port for `8099/
 **Cocktails (Bar Assistant):** set **Bar Assistant address** (for example `http://192.168.1.20:3000`), an **API token** (in Bar Assistant: Settings → Personal access tokens), and optionally a **Bar ID** on the Configuration tab, then restart. A Cocktails tab appears under Recipes.
 
 **Event locations:** suggestions come from Photon (photon.komoot.io, OpenStreetMap data) through the add-on. Only the text typed into the Location box is sent.
+
+**Photos from Immich:** set **Immich address** (for example `http://192.168.1.20:2283`) and an **Immich API key** (in Immich: Account settings → API keys) on the Configuration tab, then restart. Choose albums in Hearth under Settings → Photos.

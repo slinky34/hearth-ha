@@ -305,8 +305,11 @@ function TrackList({ item, player, onClose, onPlay, onShuffle }: {
           (r.children ?? [])
             .filter((c) => c.can_play)
             .map((c) => {
-              const [title, ...rest] = c.title.split(' - ');
-              return { id: c.media_content_id, title, sub: rest.join(' - ') || undefined };
+              // Music Assistant names tracks "Artist - Title": show the title first, artist below.
+              const [artist, ...rest] = c.title.split(' - ');
+              return rest.length
+                ? { id: c.media_content_id, title: rest.join(' - '), sub: artist }
+                : { id: c.media_content_id, title: c.title };
             }),
         ),
       )

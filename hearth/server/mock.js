@@ -233,6 +233,23 @@ export function createMockHA() {
   const cSummary = (c) => ({ id: c.id, name: c.name, description: c.description, image: `api/bar/image?u=${encodeURIComponent('mock:' + c.id)}` });
 
   return {
+    immichAlbums() {
+      return [
+        { id: '00000000-0000-4000-8000-00000000a001', name: 'Family 2026', count: 5 },
+        { id: '00000000-0000-4000-8000-00000000a002', name: 'Summer Vacation', count: 4 },
+      ];
+    },
+    immichAssets(albums, favorites) {
+      const ids = [];
+      albums.forEach((a, i) => { for (let k = 0; k < 4; k++) ids.push(`00000000-0000-4000-8000-0000000${i}0${k}b0`.slice(0, 36)); });
+      if (favorites) ids.push('00000000-0000-4000-8000-000000000f01');
+      return ids;
+    },
+    immichArt(id) {
+      const colors = ['#5B8DEF', '#6CBF84', '#F2A541', '#E77FB4', '#9B7BEA'];
+      const c = colors[parseInt(id.slice(-4, -2), 16) % colors.length] || colors[0];
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c}"/><stop offset="1" stop-color="#fff4e6"/></linearGradient></defs><rect width="1600" height="1000" fill="url(#g)"/><text x="800" y="560" font-family="sans-serif" font-size="110" fill="#fff" text-anchor="middle">Immich photo</text></svg>`;
+    },
     places(q) {
       const all = [
         { label: 'Tara Morgan Elementary School', sub: '410 Oak St, Springfield, IL, United States' },
@@ -281,7 +298,7 @@ export function createMockHA() {
         return {
           title: SONGS[k], media_class: 'track', media_content_type: 'track', media_content_id: `library://track/${n * 100 + i}`,
           can_play: true, can_expand: false, thumbnail: null,
-          ...(m[1] === 'album' ? {} : { title: `${SONGS[k]} - ${ARTISTS[k]}` }),
+          title: `${ARTISTS[k]} - ${SONGS[k]}`,
         };
       });
       return Promise.resolve({ title, media_class: m[1], media_content_type: m[1], media_content_id: id, can_play: true, can_expand: true, thumbnail: null, children });

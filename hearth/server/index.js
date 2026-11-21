@@ -15,7 +15,7 @@ const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.9.1';
+const VERSION = process.env.HEARTH_VERSION || '0.10.0';
 
 // Add-on options (set on the add-on's Configuration tab in Home Assistant).
 let options = {};
@@ -38,6 +38,11 @@ const PHOTO_DIR = resolvePhotoDir();
 // Optional: your Mealie server's address, used only to show recipe photos.
 const MEALIE_URL = String(process.env.MEALIE_URL || options.mealie_url || '').trim().replace(/\/+$/, '');
 // Optional: Bar Assistant (cocktail recipes). Talks to its API directly with a personal access token.
+// Optional: Immich (photos). Talks to its API directly with an API key.
+const IMMICH = {
+  url: String(process.env.IMMICH_URL || options.immich_url || '').trim().replace(/\/+$/, '').replace(/\/api$/, ''),
+  key: String(process.env.IMMICH_API_KEY || options.immich_api_key || '').trim(),
+};
 const BAR = {
   url: String(process.env.BAR_ASSISTANT_URL || options.bar_assistant_url || '').trim().replace(/\/+$/, ''),
   token: String(process.env.BAR_ASSISTANT_TOKEN || options.bar_assistant_token || '').trim(),
@@ -395,6 +400,28 @@ async function route(req, res) {
     return send(res, 200, Buffer.from(await img.arrayBuffer()), { 'Content-Type': img.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'max-age=3600' });
   }
   // --- Bar Assistant (cocktails) ---
+  // --- Immich (photos) ---
+  if (p === '/api/immich/status' && m === 'GET') return send(res, 200, await immichStatus());
+  if (p === '/api/immich/albums' && m === 'GET') {
+    if (!IMMICH.url) return mock ? send(res, 200, mock.immichAlbums()) : send(res, 404, { error: 'Immich is not set up' });
+    const [own, shared] = await Promise.all([immich('/albums'), immich('/albums?shared=true').catch(() => [])]);
+    const seen = new Set();
+    const list = [...own, ...shared]
+      .filter((a) => !seen.has(a.id) && seen.add(a.id))
+      .map((a) => ({ id: a.id, name: a.albumName, count: a.assetCount ?? 0 }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return send(res, 200, list);
+  }
+  match = p.match(/^\/api\/immich\/asset\/([0-9a-f-]{8,64})$/i);
+  if (match && m === 'GET') {
+    if (!IMMICH.url) return mock ? send(res, 200, mock.immichArt(match[1]), { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'max-age=86400' }) : send(res, 404, 'Not set up');
+    const r = await fetch(`${IMMICH.url}/api/assets/${match[1]}/thumbnail?size=preview`, {
+      headers: { 'x-api-key': IMMICH.key },
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!r.ok) return send(res, r.status, 'Photo unavailable');
+    return send(res, 200, Buffer.from(await r.arrayBuffer()), { 'Content-Type': r.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'max-age=86400' });
+  }
   if (p === '/api/bar/status' && m === 'GET') return send(res, 200, await barStatus());
   if (p === '/api/bar/cocktails' && m === 'GET') {
     const q = (url.searchParams.get('q') || '').trim();
@@ -471,6 +498,7 @@ async function route(req, res) {
       grocy: domains.has('grocy') || st.some((x) => x.entity_id.startsWith('sensor.grocy_')),
       taskmate: domains.has('taskmate') || st.some((x) => x.entity_id.endsWith('_overview') && Array.isArray(x.attributes?.children)),
       barAssistant: await barStatus(),
+      immich: await immichStatus(),
       mealieImages: Boolean(MEALIE_URL) || Boolean(mock),
     });
   }
@@ -538,6 +566,11 @@ async function route(req, res) {
   // --- photos ---
   if (p === '/api/photos' && m === 'GET') {
     const files = (await listPhotos()).sort();
+    try {
+      files.push(...(await immichPhotoIds()).map((id) => `immich:${id}`));
+    } catch (e) {
+      console.warn('[hearth] Immich photos:', e.message);
+    }
     return send(res, 200, files);
   }
   if (p === '/api/photos' && m === 'POST') {
@@ -596,6 +629,64 @@ const server = http.createServer((req, res) => {
 
 
 let homeLoc = null;
+
+// ---------- Immich ----------
+async function immich(path_, body) {
+  const res = await fetch(`${IMMICH.url}/api${path_}`, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'x-api-key': IMMICH.key, Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(20000),
+  });
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    throw Object.assign(new Error('Immich sent back a web page instead of data. Check the address (e.g. http://192.168.1.20:2283).'), { status: 502 });
+  }
+  if (res.status === 401) throw Object.assign(new Error('Immich rejected the API key. Create a new one in Immich (Account settings → API keys).'), { status: 502 });
+  if (!res.ok) throw Object.assign(new Error(`Immich: ${data?.message || res.status}`), { status: 502 });
+  return data;
+}
+async function immichStatus() {
+  if (!IMMICH.url) return mock ? { configured: true, ok: true } : { configured: false, ok: false };
+  if (!IMMICH.key) return { configured: true, ok: false, error: 'Add your Immich API key in the add-on options.' };
+  try {
+    await immich('/albums');
+    return { configured: true, ok: true };
+  } catch (e) {
+    console.warn('[hearth] Immich:', e.message);
+    return { configured: true, ok: false, error: e.cause?.code ? `Can't reach Immich (${e.cause.code}). Check the address.` : e.message };
+  }
+}
+let immichCache = { key: '', at: 0, ids: [] };
+/** Image ids from the albums (and favorites) chosen in Settings → Photos. Cached for 10 minutes. */
+async function immichPhotoIds() {
+  const cfg = store.data.settings?.immich ?? {};
+  const albums = Array.isArray(cfg.albums) ? cfg.albums : [];
+  if ((!IMMICH.url && !mock) || (!albums.length && !cfg.favorites)) return [];
+  if (!IMMICH.url) return mock.immichAssets(albums, cfg.favorites);
+  const key = JSON.stringify([albums, !!cfg.favorites]);
+  if (immichCache.key === key && Date.now() - immichCache.at < 10 * 60000) return immichCache.ids;
+  const ids = new Set();
+  const search = async (filter) => {
+    for (let page = 1; page <= 5 && ids.size < 3000; page++) {
+      const r = await immich('/search/metadata', { ...filter, type: 'IMAGE', size: 500, page });
+      (r.assets?.items ?? []).forEach((a) => ids.add(a.id));
+      if (!r.assets?.nextPage) break;
+    }
+  };
+  for (const id of albums) {
+    const album = await immich(`/albums/${id}`).catch(() => null);
+    const assets = (album?.assets ?? []).filter((a) => a.type === 'IMAGE');
+    if (assets.length) assets.forEach((a) => ids.add(a.id));
+    else if (album?.assetCount) await search({ albumIds: [id] });
+  }
+  if (cfg.favorites) await search({ isFavorite: true });
+  immichCache = { key, at: Date.now(), ids: [...ids] };
+  return immichCache.ids;
+}
 
 // ---------- Bar Assistant ----------
 // Bar Assistant installs differ: the API may live at /api, /bar/api (behind Salt Rim), or the address itself.

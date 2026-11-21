@@ -25,6 +25,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notify: { targets: [], eventMinutes: 15, timers: true, choreTime: '', screen: true },
   palette: 'hearth',
   language: 'auto',
+  immich: { albums: [], favorites: false },
 };
 
 function normalize(raw: Partial<StoreData>): StoreData {
@@ -33,7 +34,7 @@ function normalize(raw: Partial<StoreData>): StoreData {
     chores: raw.chores ?? [],
     completions: raw.completions ?? {},
     meals: raw.meals ?? {},
-    settings: { ...DEFAULT_SETTINGS, ...raw.settings, notify: { ...DEFAULT_SETTINGS.notify, ...raw.settings?.notify } },
+    settings: { ...DEFAULT_SETTINGS, ...raw.settings, notify: { ...DEFAULT_SETTINGS.notify, ...raw.settings?.notify }, immich: { ...DEFAULT_SETTINGS.immich, ...raw.settings?.immich } },
     timers: raw.timers ?? [],
   };
 }

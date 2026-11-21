@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0
+- **Photos from Immich:**
+  - Set the Immich address and API key on the Configuration tab.
+  - Pick albums (and optionally your favorites) in Settings → Photos.
+  - Those photos join the photo frame and screensaver alongside the local photo folder. Hearth uses Immich's preview-size images and never deletes anything in Immich.
+  - Immich also shows in Settings → Integrations, including any connection problem.
+- **Song lists** now show the song title first and the artist underneath.
+
 ## 0.9.1
 - Fixed the countdown and per-person progress chips on Today, whose top edge was cut off.
 

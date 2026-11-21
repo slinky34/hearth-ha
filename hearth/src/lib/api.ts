@@ -102,7 +102,8 @@ export const api = {
     j<{ rev: number }>(`api/store/${key}`, { ...post({ value }), method: 'PUT' }),
 
   photos: () => j<string[]>('api/photos'),
-  photoUrl: (name: string) => `photos/${name.split('/').map(encodeURIComponent).join('/')}`,
+  photoUrl: (name: string) =>
+    name.startsWith('immich:') ? `api/immich/asset/${name.slice(7)}` : `photos/${name.split('/').map(encodeURIComponent).join('/')}`,
   uploadPhoto: (file: File) =>
     j<{ name: string }>(`api/photos?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file }),
   deletePhoto: (name: string) => j(`api/photos/${name.split('/').map(encodeURIComponent).join('/')}`, { method: 'DELETE' }),
