@@ -1,5 +1,5 @@
 name: Hearth
-version: "0.14.1"
+version: "0.14.2"
 slug: hearth
 image: ghcr.io/slinky34/hearth-{arch}
 description: Family wall calendar, chores, lists, meal plan, and photo frame for wall-mounted tablets
@@ -13,6 +13,7 @@ ingress_port: 8099
 panel_icon: mdi:calendar-heart
 panel_title: Hearth
 homeassistant_api: true
+hassio_api: true
 map:
   - type: media
     read_only: false

@@ -486,7 +486,7 @@ export function SettingsView() {
             })}
           </div>
         )}
-        <p className="muted small">{t('Detections need the Frigate address on the Hearth add-on’s Configuration tab (its internal port, e.g. http://ccab4aaf-frigate:5000). For the doorbell pop-up, a Frigate “person occupancy” sensor works as the trigger.')}</p>
+        <p className="muted small">{t('Hearth finds the Frigate add-on on its own. If Frigate runs on another machine, set the Frigate address on the Hearth add-on’s Configuration tab (http://<its IP>:5000). For the doorbell pop-up, a Frigate “person occupancy” sensor works as the trigger.')}</p>
       </Section>
 
       <Section id="doorbell" title={t('Doorbell')} summary={settings.doorbell.trigger ? undefined : t('Off')}>

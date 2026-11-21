@@ -15,7 +15,7 @@ const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.14.1';
+const VERSION = process.env.HEARTH_VERSION || '0.14.2';
 
 // Add-on options (set on the add-on's Configuration tab in Home Assistant).
 let options = {};
@@ -444,24 +444,28 @@ async function route(req, res) {
   }
 
   // --- Frigate ---
-  if (p === '/api/frigate/status' && m === 'GET') return send(res, 200, await frigateStatus());
+  if (p === '/api/frigate/status' && m === 'GET') return send(res, 200, await frigateStatus(url.searchParams.has('recheck')));
   if (p === '/api/frigate/events' && m === 'GET') {
     const labels = (url.searchParams.get('labels') || '').split(',').filter((x) => /^[a-z_]+$/.test(x));
     const cameras = (url.searchParams.get('cameras') || '').split(',').filter((x) => /^[\w-]+$/.test(x));
-    if (!FRIGATE_URL) return mock ? send(res, 200, mock.frigateEvents(labels)) : send(res, 404, { error: 'Frigate is not set up' });
+    if (mock) return send(res, 200, mock.frigateEvents(labels));
+    const fb = await resolveFrigate();
+    if (!fb) return send(res, 404, { error: 'Frigate is not set up' });
     const q = new URLSearchParams({ limit: '24', has_snapshot: '1', include_thumbnails: '0' });
     if (labels.length) q.set('labels', labels.join(','));
     if (cameras.length) q.set('cameras', cameras.join(','));
-    const r = await fetch(`${FRIGATE_URL}/api/events?${q}`, { signal: AbortSignal.timeout(10000) });
+    const r = await fetch(`${fb}/api/events?${q}`, { signal: AbortSignal.timeout(10000) });
     if (!r.ok) return send(res, 502, { error: `Frigate: ${r.status}` });
     const list = await r.json();
     return send(res, 200, list.map((e) => ({ id: e.id, camera: e.camera, label: e.label, sub_label: Array.isArray(e.sub_label) ? e.sub_label[0] : e.sub_label, start: e.start_time, end: e.end_time, score: e.top_score ?? e.data?.top_score ?? e.score })));
   }
   match = p.match(/^\/api\/frigate\/(thumbnail|snapshot)\/([\w.-]{5,80})$/);
   if (match && m === 'GET') {
-    if (!FRIGATE_URL) return mock ? send(res, 200, mock.cameraSnapshot('event'), { 'Content-Type': 'image/svg+xml' }) : send(res, 404, 'Not set up');
+    if (mock) return send(res, 200, mock.cameraSnapshot('event'), { 'Content-Type': 'image/svg+xml' });
+    const fb = await resolveFrigate();
+    if (!fb) return send(res, 404, 'Not set up');
     const path_ = match[1] === 'thumbnail' ? `thumbnail.jpg` : `snapshot.jpg?bbox=1`;
-    const r = await fetch(`${FRIGATE_URL}/api/events/${match[2]}/${path_}`, { signal: AbortSignal.timeout(10000) });
+    const r = await fetch(`${fb}/api/events/${match[2]}/${path_}`, { signal: AbortSignal.timeout(10000) });
     if (!r.ok) return send(res, r.status, 'Unavailable');
     return send(res, 200, Buffer.from(await r.arrayBuffer()), { 'Content-Type': 'image/jpeg', 'Cache-Control': 'max-age=86400' });
   }
@@ -707,16 +711,83 @@ const server = http.createServer((req, res) => {
 let homeLoc = null;
 
 // ---------- Frigate ----------
-async function frigateStatus() {
-  if (!FRIGATE_URL) return mock ? { configured: true, ok: true } : { configured: false, ok: false };
+// The configured address is tried first. If it fails (or none is set), look for a Frigate add-on on this
+// Home Assistant: ask the Supervisor which add-ons run, then try the usual add-on hostnames.
+let frigateBase = FRIGATE_URL;
+let frigateNote = '';
+let frigateErr = '';
+let frigateCheckedAt = 0;
+const FRIGATE_HOSTS = ['ccab4aaf-frigate', 'ccab4aaf-frigate-fa', 'ccab4aaf-frigate-beta', 'ccab4aaf-frigate-fa-beta'];
+
+async function probeFrigate(base) {
   try {
-    const r = await fetch(`${FRIGATE_URL}/api/version`, { signal: AbortSignal.timeout(6000) });
-    if (r.status === 401) return { configured: true, ok: false, error: 'Frigate asked for a login. Use its internal port (5000), e.g. http://ccab4aaf-frigate:5000.' };
-    if (!r.ok) return { configured: true, ok: false, error: `Frigate answered ${r.status}. Check the address.` };
-    return { configured: true, ok: true, version: (await r.text()).trim() };
+    const r = await fetch(`${base}/api/version`, { signal: AbortSignal.timeout(4000) });
+    return r.ok ? 'ok' : String(r.status);
   } catch (e) {
-    return { configured: true, ok: false, error: `Can't reach Frigate (${e.cause?.code || e.message}). Check the address.` };
+    return e.cause?.code || e.message;
   }
+}
+
+async function frigateAddons() {
+  if (!IN_ADDON) return [];
+  try {
+    const r = await fetch('http://supervisor/addons', { headers: { Authorization: `Bearer ${process.env.SUPERVISOR_TOKEN}` }, signal: AbortSignal.timeout(5000) });
+    if (!r.ok) return [];
+    const list = (await r.json()).data?.addons ?? [];
+    return list.filter((a) => /frigate/i.test(a.slug) && a.state === 'started').map((a) => ({ name: a.name, host: a.slug.replace(/_/g, '-') }));
+  } catch {
+    return [];
+  }
+}
+
+async function resolveFrigate(force = false) {
+  if (mock) return '';
+  if (!force && Date.now() - frigateCheckedAt < (frigateErr ? 60000 : 10 * 60000)) return frigateBase;
+  frigateCheckedAt = Date.now();
+  frigateNote = '';
+  frigateErr = '';
+  let configuredResult = '';
+  if (FRIGATE_URL) {
+    configuredResult = await probeFrigate(FRIGATE_URL);
+    if (configuredResult === 'ok') return (frigateBase = FRIGATE_URL);
+  }
+  if (IN_ADDON) {
+    const found = await frigateAddons();
+    const tried = new Set();
+    for (const c of [...found, ...FRIGATE_HOSTS.map((host) => ({ name: 'Frigate', host }))]) {
+      if (tried.has(c.host)) continue;
+      tried.add(c.host);
+      const base = `http://${c.host}:5000`;
+      if (base === FRIGATE_URL) continue;
+      if ((await probeFrigate(base)) === 'ok') {
+        frigateNote = FRIGATE_URL
+          ? `${FRIGATE_URL} didn't answer, so Hearth is using the ${c.name} add-on at ${base}. Update the address on the Configuration tab to match.`
+          : `Found the ${c.name} add-on at ${base}.`;
+        return (frigateBase = base);
+      }
+    }
+  }
+  frigateBase = FRIGATE_URL;
+  if (FRIGATE_URL) {
+    frigateErr =
+      configuredResult === '401'
+        ? `Frigate asked for a login. Use its internal port 5000 (not 8971), e.g. http://<frigate-ip>:5000.`
+        : `Can't reach Frigate at ${FRIGATE_URL} (${configuredResult})${IN_ADDON ? ', and no Frigate add-on was found on this Home Assistant' : ''}. If Frigate runs on another machine, use http://<its IP>:5000, and make sure port 5000 is published.`;
+  }
+  return frigateBase;
+}
+
+async function frigateStatus(force = false) {
+  if (mock) return { configured: true, ok: true };
+  const base = await resolveFrigate(force);
+  if (!base) return { configured: false, ok: false };
+  if (frigateErr) return { configured: true, ok: false, error: frigateErr };
+  const r = await probeFrigate(base);
+  if (r !== 'ok') {
+    frigateCheckedAt = 0;
+    return { configured: true, ok: false, error: `Can't reach Frigate at ${base} (${r}).` };
+  }
+  return { configured: true, ok: true, url: base, note: frigateNote || undefined };
 }
 
 // ---------- Immich ----------

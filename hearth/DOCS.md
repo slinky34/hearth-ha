@@ -42,7 +42,7 @@ Add the **Waze Travel Time** integration in Home Assistant (any route), then tur
 
 ## Cameras and Frigate
 
-Pick cameras under **Settings → Cameras**; any Home Assistant camera works. For Frigate's recent-detections feed, set **Frigate address** on the Configuration tab to Frigate's internal port: `http://ccab4aaf-frigate:5000` for the Frigate add-on (`http://ccab4aaf-frigate-fa:5000` for Frigate Full Access), or `http://<frigate-ip>:5000`.
+Pick cameras under **Settings → Cameras**; any Home Assistant camera works. Frigate's recent-detections feed connects by itself when Frigate runs as a Home Assistant add-on (regular, Full Access, or Beta). If Frigate runs on another machine, set **Frigate address** on the Configuration tab to `http://<frigate-ip>:5000`, and make sure port 5000 is published (Frigate's login port, 8971, won't work).
 
 ## Phone app
 

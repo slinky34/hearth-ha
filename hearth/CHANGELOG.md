@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.2
+- **Frigate is found automatically.** If the Frigate address doesn't answer, or isn't set, Hearth looks for a running Frigate add-on (regular, Full Access, or Beta) and connects to it. The Frigate address is now only needed when Frigate runs on another machine.
+- Settings → Integrations shows which Frigate address Hearth is using, and clearer help when it can't connect.
+- The add-on can now read basic Supervisor info, which it uses to find Frigate.
+
 ## 0.14.1
 - **Remove meals:** tap a planned meal to open it, then tap **Remove**, or change it and tap **Save**. Empty slots still let you type straight in.
 - Mealie and Grocy meals can be removed too. This hides them in Hearth; delete them in Mealie or Grocy to remove them everywhere. You can also replace them with something else.
