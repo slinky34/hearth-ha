@@ -1,7 +1,7 @@
 import {
-  CalendarDays, House, Image, LayoutGrid, ListChecks, Lock, Maximize, Music, Settings as Gear, Sparkles, UtensilsCrossed,
+  BookOpen, CalendarDays, House, Image, LayoutGrid, ListChecks, Lock, Maximize, Music, Settings as Gear, Sparkles, UtensilsCrossed,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal } from './components/Modal';
 import { TopBar } from './components/TopBar';
 import { HaProvider } from './lib/ha';
@@ -14,12 +14,14 @@ import { applyPalette } from './lib/themes';
 import { setLanguage, t } from './lib/i18n';
 import { TimerAlarm } from './components/Timers';
 import { Reminders } from './components/Reminders';
+import { Toaster } from './components/Toast';
 import { CalendarView } from './views/CalendarView';
 import { ChoresView } from './views/ChoresView';
 import { HomeView } from './views/HomeView';
 import { ListsView } from './views/ListsView';
 import { MealsView } from './views/MealsView';
 import { MusicView } from './views/MusicView';
+import { RecipesView } from './views/RecipesView';
 import { PhotosView } from './views/PhotosView';
 import { Screensaver } from './views/Screensaver';
 import { SettingsView } from './views/SettingsView';
@@ -31,6 +33,7 @@ const TABS = [
   { id: 'chores', label: 'Tasks', Icon: Sparkles },
   { id: 'lists', label: 'Lists', Icon: ListChecks },
   { id: 'meals', label: 'Meals', Icon: UtensilsCrossed },
+  { id: 'recipes', label: 'Recipes', Icon: BookOpen },
   { id: 'photos', label: 'Photos', Icon: Image },
   { id: 'music', label: 'Music', Icon: Music },
   { id: 'home', label: 'Home', Icon: House },
@@ -113,12 +116,24 @@ function Shell() {
   });
   const [idle, setIdle] = useIdle(data.settings.screensaverMinutes);
   const [exiting, setExiting] = useState(false);
+  const [recipeToOpen, setRecipeToOpen] = useState<string | null>(null);
+  const clearRecipe = useCallback(() => setRecipeToOpen(null), []);
   const press = useRef(0);
   useTheme(data.settings.theme, data.settings.palette);
 
   useEffect(() => {
     history.replaceState(null, '', `${location.search}#${tab}`);
   }, [tab]);
+
+  // Other screens can ask to open a recipe.
+  useEffect(() => {
+    const go = (e: Event) => {
+      setRecipeToOpen((e as CustomEvent<string>).detail);
+      setTab('recipes');
+    };
+    window.addEventListener('hearth:open-recipe', go);
+    return () => window.removeEventListener('hearth:open-recipe', go);
+  }, []);
 
   // Drift back home while nobody is using the screen.
   useEffect(() => {
@@ -184,6 +199,7 @@ function Shell() {
           {tab === 'lists' && <ListsView />}
           {tab === 'meals' && <MealsView />}
           {tab === 'photos' && <PhotosView onSlideshow={() => setIdle(true)} />}
+          {tab === 'recipes' && <RecipesView openSlug={recipeToOpen} onOpened={clearRecipe} />}
           {tab === 'music' && <MusicView />}
           {tab === 'home' && <HomeView />}
           {tab === 'settings' && !kiosk && <SettingsView />}
@@ -193,6 +209,7 @@ function Shell() {
       {exiting && <ExitKiosk onClose={() => setExiting(false)} />}
       <Reminders />
       <TimerAlarm />
+      <Toaster />
     </div>
   );
 }

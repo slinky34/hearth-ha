@@ -2,6 +2,9 @@ import { addDays, addWeeks, isToday, startOfWeek } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { useGrocy } from '../lib/grocy';
+import { mealPlan, type PlanEntry } from '../lib/mealie';
+import { openRecipe } from './RecipesView';
+import { useEffect } from 'react';
 import { useStore } from '../lib/store';
 import type { MealType } from '../lib/types';
 import { dateKey } from '../lib/util';
@@ -20,6 +23,13 @@ export function MealsView() {
   const [draft, setDraft] = useState('');
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const { grocy } = useGrocy();
+  const [mealie, setMealie] = useState<PlanEntry[]>([]);
+  useEffect(() => {
+    mealPlan(weekStart, 7).then(setMealie).catch(() => setMealie([]));
+  }, [weekStart]);
+  // Mealie "side" entries go with dinner.
+  const mealieFor = (k: string, meal: MealType) =>
+    mealie.filter((e) => e.date === k && (e.type === meal || (meal === 'dinner' && e.type === 'side')));
   // Grocy meal plan entries fill empty slots (sections without a name count as dinner).
   const grocyMeal = (k: string, meal: MealType) =>
     grocy.meals
@@ -94,6 +104,23 @@ export function MealsView() {
                   }}
                 />
               ) : (
+                !value && mealieFor(k, m.key).length > 0 ? (
+                  <div key={id} className={`meal-cell filled mealie ${m.key}`}>
+                    {mealieFor(k, m.key).map((e, n) =>
+                      e.recipe ? (
+                        <button key={n} className="meal-recipe" onClick={() => openRecipe(e.recipe!.slug)}>
+                          📖 {e.recipe.name}
+                        </button>
+                      ) : (
+                        <span key={n}>{e.title}</span>
+                      ),
+                    )}
+                    <span className="raw-tag">Mealie</span>
+                    <button className="meal-edit" onClick={() => begin(k, m.key)} aria-label={t('Edit')}>
+                      ✎
+                    </button>
+                  </div>
+                ) : (
                 <button key={id} className={`meal-cell ${value ? 'filled' : ''} ${m.key}`} onClick={() => begin(k, m.key)}>
                   {value ??
                     (grocyMeal(k, m.key) ? (
@@ -105,6 +132,7 @@ export function MealsView() {
                       <span className="plus">+</span>
                     ))}
                 </button>
+                )
               );
             })}
           </div>

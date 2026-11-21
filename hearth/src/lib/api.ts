@@ -49,6 +49,7 @@ export const api = {
   mediaImageUrl: (entity: string, key: string) => `api/ha/media_image/${entity}?v=${encodeURIComponent(key)}`,
   notifyTargets: () => j<string[]>('api/ha/notify_targets'),
   notifyTest: (target: string) => j<{ ok: boolean }>('api/notify/test', post({ target })),
+  mealieEntry: () => j<{ entry_id: string | null; images: boolean }>('api/ha/mealie'),
   musicAssistantEntry: () => j<{ entry_id: string | null }>('api/ha/music_assistant'),
 
   calendars: () => j<CalendarInfo[]>('api/ha/calendars'),

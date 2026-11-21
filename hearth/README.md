@@ -7,6 +7,7 @@ A self-hosted, Skylight-style family wall display that runs as a Home Assistant 
 - **Tasks**: Skylight-style per-person columns with Morning / Afternoon / Evening / Chores progress rings, big emoji task cards, stars, and streaks. There's also a Compact layout. Each person can be linked to an HA to-do list, such as a TaskMate child list.
 - **Lists**: HA to-do lists (Shopping List, Local To-do, AnyList, Todoist, and others), plus a Grocy shopping list and expiring products. Raw data that other apps write into lists is shown as a short label.
 - **Meals**: a weekly planner. The Grocy meal plan fills empty slots.
+- **Recipes (Mealie)**: your Mealie meal plan and recipes, cook mode with large step-by-step text, an ingredient checklist, scaling, and one-tap timers for timed steps; add a recipe to the meal plan or its ingredients to a shopping list.
 - **Music**: the now-playing pill in the header, full controls (play/pause, skip, volume) for any HA media player, and Music Assistant playlists.
 - **Home**: tap tiles for lights, switches, fans, scenes, and scripts, plus sensor readouts. Locks, alarms, and garage doors are intentionally excluded.
 - **Timers**: several named timers at once, with presets (Pasta, Oven, Homework…). They're shared across screens, and the alarm chimes and flashes until dismissed.
@@ -24,6 +25,7 @@ All integrations go through Home Assistant, so there are no extra logins in Hear
 | Any HA calendar (Google, iCloud/CalDAV, Local Calendar, Outlook…) | events, adding events |
 | HA to-do lists (Shopping List, Local To-do, AnyList, Todoist…) | Lists screen |
 | TaskMate | link a child's to-do list to a person on the Tasks screen |
+| Mealie | meal plan, recipe search, cook mode, add to plan |
 | Grocy (custom-components/grocy) | shopping list, chores, expiring products, meal plan |
 | Media players / Music Assistant | now playing, controls, playlists |
 | Weather | current conditions and forecast |

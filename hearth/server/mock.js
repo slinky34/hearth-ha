@@ -135,6 +135,7 @@ export function createMockHA() {
         is_volume_muted: false,
         entity_picture: `/api/media_player_proxy/${id}`,
         supported_features: 0xffff,
+        ...(id === 'media_player.living_room' ? { mass_player_type: 'player', active_queue: 'living_room' } : {}),
       },
     };
   }
@@ -172,7 +173,49 @@ export function createMockHA() {
   const ok = (data) => ({ status: 200, data });
   const ids = (v) => (Array.isArray(v) ? v : [v]);
 
+  // Shaped like Home Assistant's Mealie service responses (aiomealie dataclasses).
+  const ing = (quantity, unit, food, note = '') => ({ quantity, unit, food, note, is_food: true, disable_amount: false, reference_id: String(uid++) });
+  const step = (text, title = '') => ({ instruction_id: String(uid++), title, text, ingredient_references: [] });
+  const RECIPES = [
+    {
+      recipe_id: 'r-tacos', slug: 'weeknight-tacos', name: 'Weeknight Tacos', recipe_yield: '4 servings', total_time: '30 minutes',
+      description: 'Crispy-edged spiced beef tacos the whole family can build themselves.', color: '#F2A541', emoji: '🌮',
+      ingredients: [ing(1, 'pound', 'ground beef'), ing(1, 'tablespoon', 'chili powder'), ing(1, 'teaspoon', 'cumin'), ing(0.5, 'teaspoon', 'salt'), ing(8, '', 'small tortillas'), ing(1, 'cup', 'shredded cheese'), ing(null, '', '', 'Lettuce, salsa, and lime to serve')],
+      instructions: [step('Heat a large skillet over medium-high heat and add the beef. Break it up and cook for 8 minutes until browned.'), step('Stir in the chili powder, cumin, and salt with 1/4 cup water. Simmer for 5 minutes.'), step('Warm the tortillas in a dry pan, about 30 seconds per side.'), step('Set out the fillings and let everyone build their own tacos.')],
+    },
+    {
+      recipe_id: 'r-pancakes', slug: 'banana-pancakes', name: 'Banana Pancakes', recipe_yield: '12 pancakes', total_time: '25 minutes',
+      description: 'Fluffy Saturday pancakes with mashed banana.', color: '#E3B92F', emoji: '🥞',
+      ingredients: [ing(2, 'cup', 'flour'), ing(2, 'tablespoon', 'sugar'), ing(1, 'tablespoon', 'baking powder'), ing(2, '', 'ripe bananas', 'mashed'), ing(1.5, 'cup', 'milk'), ing(2, '', 'eggs')],
+      instructions: [step('Whisk the flour, sugar, and baking powder in a bowl.'), step('In another bowl mash the bananas, then whisk in the milk and eggs.'), step('Fold wet into dry until just combined. Let the batter rest for 5 minutes.'), step('Cook 1/4 cup scoops on a buttered griddle for 2 to 3 minutes per side.')],
+    },
+    {
+      recipe_id: 'r-salmon', slug: 'sheet-pan-salmon', name: 'Sheet-Pan Salmon & Veggies', recipe_yield: '4 servings', total_time: '35 minutes',
+      description: 'One pan, lemony salmon with roasted broccoli and potatoes.', color: '#E9736B', emoji: '🐟',
+      ingredients: [ing(4, '', 'salmon fillets'), ing(1, 'pound', 'baby potatoes', 'halved'), ing(1, 'head', 'broccoli', 'cut into florets'), ing(3, 'tablespoon', 'olive oil'), ing(1, '', 'lemon')],
+      instructions: [step('Heat the oven to 425°F.', 'Prep'), step('Toss the potatoes with half the oil and roast for 15 minutes.', 'Roast'), step('Add the broccoli and salmon, drizzle with the rest of the oil, and bake 12 to 15 minutes.'), step('Squeeze lemon over everything and serve.', 'Serve')],
+    },
+    {
+      recipe_id: 'r-spag', slug: 'spaghetti-meatballs', name: 'Spaghetti & Meatballs', recipe_yield: '6 servings', total_time: '1 hour',
+      description: 'Classic Sunday sauce with tender baked meatballs.', color: '#9B7BEA', emoji: '🍝',
+      ingredients: [ing(1, 'pound', 'spaghetti'), ing(1, 'pound', 'ground beef'), ing(0.5, 'cup', 'breadcrumbs'), ing(1, '', 'egg'), ing(24, 'ounce', 'marinara sauce'), ing(null, '', '', 'Parmesan to serve')],
+      instructions: [step('Mix the beef, breadcrumbs, and egg. Roll into 18 meatballs.'), step('Bake at 400°F for 20 minutes.'), step('Simmer the meatballs in the marinara for 10 minutes.'), step('Boil the spaghetti for 9 minutes, drain, and serve topped with meatballs.')],
+    },
+  ];
+  const strip = (r) => { const { color, emoji, ...rest } = r; return rest; };
+  const base = (r) => ({ recipe_id: r.recipe_id, slug: r.slug, name: r.name, description: r.description, image: 'img', recipe_yield: r.recipe_yield, total_time: r.total_time });
+  const mealplan = () => {
+    const today = new Date();
+    return [[0, 'dinner', 0], [1, 'dinner', 2], [2, 'breakfast', 1], [3, 'dinner', 3]].map(([d, type, ri], i) => ({
+      mealplan_id: i + 1, entry_type: type, mealplan_date: dateKey(addDays(today, d)), title: '', description: '', recipe: base(RECIPES[ri]),
+    }));
+  };
+
   return {
+    recipeArt(id) {
+      const r = RECIPES.find((x) => x.recipe_id === id) ?? RECIPES[0];
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${r.color}"/><stop offset="1" stop-color="#fff4e6"/></linearGradient></defs><rect width="400" height="300" fill="url(#g)"/><text x="200" y="185" font-size="120" text-anchor="middle">${r.emoji}</text></svg>`;
+    },
     albumArt(id) {
       const p = players[id];
       const [title, , , color] = TRACKS[p ? p.track : 0];
@@ -190,8 +233,11 @@ export function createMockHA() {
       if (method === 'GET' && p === '/states') return ok(states());
       if (method === 'GET' && p === '/services')
         return ok([{ domain: 'notify', services: { mobile_app_jordans_phone: {}, mobile_app_alexs_ipad: {}, persistent_notification: {}, send_message: {} } }]);
-      if (method === 'GET' && p === '/config/config_entries/entry')
+      if (method === 'GET' && p === '/config/config_entries/entry') {
+        const domain = url.searchParams.get('domain');
+        if (domain === 'mealie') return ok([{ entry_id: 'mock_mealie', domain: 'mealie', state: 'loaded', title: 'Mealie' }]);
         return ok([{ entry_id: 'mock_mass', domain: 'music_assistant', state: 'loaded', title: 'Music Assistant' }]);
+      }
       if (method === 'GET' && p.startsWith('/states/')) {
         const s = states().find((x) => x.entity_id === p.split('/')[2]);
         return s ? ok(s) : { status: 404, data: { message: 'Entity not found' } };
@@ -273,6 +319,8 @@ export function createMockHA() {
             },
           });
         case 'music_assistant.play_media':
+          if (entities.some((e) => e !== 'media_player.living_room'))
+            return { status: 400, data: { message: `Entity ${entities[0]} is not a Music Assistant player` } };
           for (const e of entities) if (players[e]) Object.assign(players[e], { state: 'playing', track: (players[e].track + 1) % TRACKS.length, started: Date.now() });
           return ok([]);
         case 'light.toggle':
@@ -297,6 +345,21 @@ export function createMockHA() {
           if (c) c.next_estimated_execution_time = localIso(addDays(new Date(), 7));
           return ok([]);
         }
+        case 'mealie.get_mealplan':
+          return ok({ changed_states: [], service_response: { mealplan: mealplan() } });
+        case 'mealie.get_recipes': {
+          const q = String(body.search_terms || '').toLowerCase();
+          const items = RECIPES.filter((r) => !q || r.name.toLowerCase().includes(q)).map(base);
+          return ok({ changed_states: [], service_response: { recipes: { items } } });
+        }
+        case 'mealie.get_recipe': {
+          const r = RECIPES.find((x) => x.slug === body.recipe_id || x.recipe_id === body.recipe_id);
+          if (!r) return { status: 400, data: { message: 'Recipe not found' } };
+          return ok({ changed_states: [], service_response: { recipe: { ...strip(r), image: 'img' } } });
+        }
+        case 'mealie.set_mealplan':
+          console.log(`[mock mealie] planned ${body.recipe_id} for ${body.entry_type} on ${body.date}`);
+          return ok({ changed_states: [], service_response: { mealplan: {} } });
         default:
           return { status: 400, data: { message: `Mock does not implement ${svc}` } };
       }

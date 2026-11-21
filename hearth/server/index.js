@@ -15,7 +15,7 @@ const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.4.0';
+const VERSION = process.env.HEARTH_VERSION || '0.5.0';
 
 // Add-on options (set on the add-on's Configuration tab in Home Assistant).
 let options = {};
@@ -35,6 +35,8 @@ function resolvePhotoDir() {
   return '/media/hearth';
 }
 const PHOTO_DIR = resolvePhotoDir();
+// Optional: your Mealie server's address, used only to show recipe photos.
+const MEALIE_URL = String(process.env.MEALIE_URL || options.mealie_url || '').trim().replace(/\/+$/, '');
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 try {
@@ -105,6 +107,10 @@ const SERVICES = new Set([
   'grocy.add_generic',
   'grocy.update_generic',
   'grocy.execute_chore',
+  'mealie.get_mealplan',
+  'mealie.get_recipe',
+  'mealie.get_recipes',
+  'mealie.set_mealplan',
 ]);
 // Extra checks for services that could otherwise touch more than intended.
 const SERVICE_GUARDS = {
@@ -304,6 +310,26 @@ async function route(req, res) {
     if (!img.ok) return send(res, img.status, 'Artwork unavailable');
     const buf = Buffer.from(await img.arrayBuffer());
     return send(res, 200, buf, { 'Content-Type': img.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'max-age=300' });
+  }
+  // Mealie integration's config entry id (needed for every mealie.* service).
+  if (p === '/api/ha/mealie' && m === 'GET') {
+    const r = await ha('GET', '/config/config_entries/entry?domain=mealie');
+    const entry = Array.isArray(r.data) ? r.data.find((e) => e.state === 'loaded') ?? r.data[0] : null;
+    return send(res, 200, { entry_id: entry?.entry_id ?? null, images: Boolean(MEALIE_URL || mock) });
+  }
+  // Recipe photos, fetched from Mealie (its media endpoints are public) so https/mixed-content isn't an issue.
+  match = p.match(/^\/api\/mealie\/image\/([\w-]{1,64})$/);
+  if (match && m === 'GET') {
+    if (mock) return send(res, 200, mock.recipeArt(match[1]), { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'max-age=3600' });
+    if (!MEALIE_URL) return send(res, 404, 'Set mealie_url in the add-on options to show recipe photos');
+    try {
+      const img = await fetch(`${MEALIE_URL}/api/media/recipes/${match[1]}/images/min-original.webp`, { signal: AbortSignal.timeout(15000) });
+      if (!img.ok) return send(res, img.status, 'No photo');
+      const buf = Buffer.from(await img.arrayBuffer());
+      return send(res, 200, buf, { 'Content-Type': img.headers.get('content-type') || 'image/webp', 'Cache-Control': 'max-age=86400' });
+    } catch (e) {
+      return send(res, 502, 'Mealie unreachable');
+    }
   }
   // Music Assistant's config entry id (needed for music_assistant.get_library).
   if (p === '/api/ha/music_assistant' && m === 'GET') {

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { AlbumArt } from '../components/NowPlaying';
 import { api } from '../lib/api';
 import { useNow } from '../lib/hooks';
-import { useMusic, type Player } from '../lib/music';
+import { F, can, titleOf, useMusic, type Player } from '../lib/music';
 import { t } from '../lib/i18n';
 
 interface Playlist {
@@ -33,7 +33,8 @@ function Progress({ p }: { p: Player }) {
 }
 
 export function MusicView() {
-  const { players, active, select, call } = useMusic();
+  const { players, massPlayers, active, select, call } = useMusic();
+  const [target, setTarget] = useState<string>('');
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
   const [entry, setEntry] = useState<string | null>(null);
 
@@ -66,6 +67,13 @@ export function MusicView() {
 
   const p = active!;
   const playing = p.state === 'playing';
+  // Music Assistant can only play to its own players: use the chosen one, else the active
+  // speaker if it's an MA player, else the MA player with the same name, else the first.
+  const playTarget =
+    massPlayers.find((m) => m.id === target) ??
+    (p.mass ? p : undefined) ??
+    massPlayers.find((m) => m.name.toLowerCase() === p.name.toLowerCase()) ??
+    massPlayers[0];
   return (
     <div className="music">
       <div className="view-head">
@@ -84,22 +92,23 @@ export function MusicView() {
         <div className="music-now card">
           <AlbumArt player={p} size={220} />
           <div className="music-meta">
-            <h2>{p.title ?? (p.state === 'off' ? t('Off') : t('Nothing playing'))}</h2>
+            <h2>{p.state === 'playing' || p.state === 'paused' ? titleOf(p) : p.state === 'off' ? t('Off') : t('Nothing playing')}</h2>
             {p.artist && <p className="muted">{p.artist}</p>}
+            {!p.title && p.app && <p className="muted small">{p.app}</p>}
             {p.album && <p className="muted small">{p.album}</p>}
             <Progress p={p} />
             <div className="music-controls">
-              <button className="icon-btn big" onClick={() => call('media_previous_track')} aria-label={t('Previous')}>
+              <button className="icon-btn big" onClick={() => call('media_previous_track')} aria-label={t('Previous')} disabled={!can(p, F.PREVIOUS)}>
                 <SkipBack size={28} fill="currentColor" />
               </button>
-              <button className="icon-btn play" onClick={() => call('media_play_pause')} aria-label={playing ? t('Pause') : t('Play')}>
+              <button className="icon-btn play" onClick={() => call('media_play_pause')} aria-label={playing ? t('Pause') : t('Play')} disabled={!can(p, F.PAUSE) && !can(p, F.PLAY)}>
                 {playing ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" />}
               </button>
-              <button className="icon-btn big" onClick={() => call('media_next_track')} aria-label={t('Next')}>
+              <button className="icon-btn big" onClick={() => call('media_next_track')} aria-label={t('Next')} disabled={!can(p, F.NEXT)}>
                 <SkipForward size={28} fill="currentColor" />
               </button>
             </div>
-            {p.volume != null && (
+            {p.volume != null && can(p, F.VOLUME_SET) && (
               <label className="volume">
                 <Volume1 size={20} />
                 <input
@@ -119,15 +128,34 @@ export function MusicView() {
 
         {entry && playlists && playlists.length > 0 && (
           <section className="playlists">
-            <h3 className="today-label">
-              <ListMusic size={14} /> {t('Playlists')} · Music Assistant
-            </h3>
+            <div className="playlist-head">
+              <h3 className="today-label">
+                <ListMusic size={14} /> {t('Playlists')} · Music Assistant
+              </h3>
+              {massPlayers.length > 1 && (
+                <label className="play-on">
+                  {t('Play on')}
+                  <select value={playTarget?.id ?? ''} onChange={(e) => setTarget(e.target.value)}>
+                    {massPlayers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+            {massPlayers.length === 0 && <p className="muted small">{t('No Music Assistant speakers found. Playlists can only play on Music Assistant players.')}</p>}
             <div className="playlist-grid">
               {playlists.map((pl) => (
                 <button
                   key={pl.uri}
                   className="playlist"
-                  onClick={() => call('music_assistant.play_media', { media_id: pl.uri, media_type: 'playlist' })}
+                  disabled={!playTarget}
+                  onClick={async () => {
+                    if (!playTarget) return;
+                    if (await call('music_assistant.play_media', { media_id: pl.uri, media_type: 'playlist' }, playTarget.id)) select(playTarget.id);
+                  }}
                 >
                   {pl.image ? <img src={pl.image} alt="" /> : <span className="playlist-art"><ListMusic size={28} /></span>}
                   <span>{pl.name}</span>

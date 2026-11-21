@@ -1,6 +1,6 @@
 import { Music, Pause, Play } from 'lucide-react';
 import { api } from '../lib/api';
-import { isActive, useMusic, type Player } from '../lib/music';
+import { F, can, isActive, titleOf, useMusic, type Player } from '../lib/music';
 
 export function AlbumArt({ player, size }: { player: Player; size: number }) {
   return player.hasArt ? (
@@ -22,13 +22,13 @@ export function NowPlayingPill({ onOpen }: { onOpen: () => void }) {
       <button className="np-info" onClick={onOpen}>
         <AlbumArt player={p} size={36} />
         <span className="np-text">
-          <b>{p.title}</b>
-          <span>{p.artist ?? p.name}</span>
+          <b>{titleOf(p)}</b>
+          <span>{p.title && p.artist ? p.artist : p.name}</span>
         </span>
       </button>
-      <button className="icon-btn np-btn" onClick={() => call('media_play_pause')} aria-label={p.state === 'playing' ? 'Pause' : 'Play'}>
+      {(can(p, F.PAUSE) || can(p, F.PLAY)) && <button className="icon-btn np-btn" onClick={() => call('media_play_pause')} aria-label={p.state === 'playing' ? 'Pause' : 'Play'}>
         {p.state === 'playing' ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
-      </button>
+      </button>}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 name: Hearth
-version: "0.4.0"
+version: "0.5.0"
 slug: hearth
 description: Family wall calendar, chores, lists, meal plan, and photo frame for wall-mounted tablets
 url: https://github.com/slinky34/hearth-ha
@@ -23,5 +23,7 @@ ports_description:
   8099/tcp: Direct access for kiosk tablets (no HA login). Leave empty unless you need it.
 options:
   photo_directory: /media/hearth
+  mealie_url: ""
 schema:
   photo_directory: str
+  mealie_url: str?

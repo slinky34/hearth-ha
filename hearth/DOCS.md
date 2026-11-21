@@ -11,3 +11,7 @@ Open Hearth from the sidebar, then go to **Settings**:
 Adding events works for calendars that support it in HA (Local Calendar, Google, CalDAV). Subscribed ICS feeds are read-only.
 
 To use Hearth on a tablet that isn't signed in to HA, set a host port for `8099/tcp` under Network. Anyone on your LAN can reach that port.
+
+**Recipes:** add Home Assistant's **Mealie** integration and your recipes and meal plan show up on the Recipes screen. To see recipe photos, also set **Mealie address** (`mealie_url`, for example `http://192.168.1.20:9000`) on the Configuration tab.
+
+**Music Assistant playlists** only play on Music Assistant's own speaker entities. If a speaker appears twice (for example Sonos and Music Assistant), Hearth automatically sends playlists to the Music Assistant one.
