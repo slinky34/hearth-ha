@@ -35,18 +35,30 @@ function exitFullscreen() {
 }
 
 /**
- * Keeps the screen awake while `on` (kiosk mode), using the Screen Wake Lock API.
- * The lock drops whenever the page is hidden, so it's taken again when the page comes back,
- * and on the next tap in case the browser wants a user gesture first.
+ * Keeps the screen awake while `on` (kiosk mode). Two layers, because iPads are unreliable here:
+ *  1. the Screen Wake Lock API, taken again whenever it drops;
+ *  2. a tiny muted looping video (1 KB, invisible), which iOS treats as "something is playing".
+ * Both are retried when the page comes back and on the next tap, in case a gesture is needed.
  */
 function useWakeLock(on: boolean) {
   useEffect(() => {
     const wl = (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<{ released: boolean; release: () => Promise<void> }> } }).wakeLock;
-    if (!on || !wl) return;
+    if (!on) return;
     let lock: { released: boolean; release: () => Promise<void> } | null = null;
     let alive = true;
+    const video = document.createElement('video');
+    video.src = 'keepawake.mp4';
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.setAttribute('playsinline', '');
+    video.setAttribute('aria-hidden', 'true');
+    video.style.cssText = 'position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1';
+    document.body.appendChild(video);
     const take = async () => {
-      if (!alive || document.visibilityState !== 'visible' || (lock && !lock.released)) return;
+      if (!alive || document.visibilityState !== 'visible') return;
+      if (video.paused) video.play().catch(() => undefined);
+      if (!wl || (lock && !lock.released)) return;
       try {
         lock = await wl.request('screen');
       } catch {
@@ -56,13 +68,15 @@ function useWakeLock(on: boolean) {
     take();
     document.addEventListener('visibilitychange', take);
     window.addEventListener('pointerdown', take);
-    const id = setInterval(take, 60000);
+    const id = setInterval(take, 20000);
     return () => {
       alive = false;
       document.removeEventListener('visibilitychange', take);
       window.removeEventListener('pointerdown', take);
       clearInterval(id);
       lock?.release().catch(() => undefined);
+      video.pause();
+      video.remove();
     };
   }, [on]);
 }

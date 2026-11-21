@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.9
+- **Kiosk mode keeps iPads awake:** along with the wake lock, kiosk mode now plays a tiny invisible, silent video on a loop (1 KB). iPads treat it as something playing and don't auto-lock, even where the wake lock is ignored or dropped. It stops as soon as kiosk mode is off.
+- Hearth checks every 20 seconds, and on every tap, that keep-awake is still running.
+
 ## 0.15.8
 - **Settings in kiosk mode:** the Settings button stays in kiosk mode. Tapping it asks for the kiosk PIN (if you set one) and opens Settings without leaving kiosk mode; it locks again when you leave Settings. Before, Settings disappeared until you left kiosk mode.
 - Removed the automatic iPad sidebar offset and the "Space above the sidebar" setting from 0.15.6 and 0.15.7. They weren't needed (the covered button came from Safari, not Hearth).
