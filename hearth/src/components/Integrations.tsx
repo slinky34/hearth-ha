@@ -7,7 +7,7 @@ interface Status {
   domains: string[];
   counts: { calendar: number; todo: number; weather: number; media_player: number; notify: number };
   grocy: boolean;
-  grocyDirect?: { configured: boolean; ok: boolean; error?: string; note?: string };
+  grocyDirect?: { configured: boolean; ok: boolean; error?: string; note?: string; tried?: string };
   taskmate: boolean;
   barAssistant: { configured: boolean; ok: boolean; error?: string };
   immich: { configured: boolean; ok: boolean; error?: string };
@@ -54,7 +54,8 @@ export function Integrations() {
           detail: st.grocyDirect?.ok ? `${t('Shopping, chores, expiring food, meal plan')} · ${t('via the Grocy add-on')}` : t('Shopping, chores, expiring food, meal plan'),
           how: st.grocyDirect?.configured && st.grocyDirect.error
             ? st.grocyDirect.error
-            : t('Install the Grocy add-on (then add an API key on the Hearth add-on’s Configuration tab) or the Grocy integration from HACS.'),
+            : t('Install the Grocy add-on (then add an API key on the Hearth add-on’s Configuration tab) or the Grocy integration from HACS.') +
+              (st.grocyDirect?.tried ? ` ${t('Looked for the Grocy add-on:')} ${st.grocyDirect.tried}` : ''),
           problem: !!st.grocyDirect?.configured && !st.grocyDirect.ok,
         },
         { icon: '⭐', name: 'TaskMate', on: st.taskmate, detail: t('Link kids’ chore lists under Family'), how: t('Install the TaskMate custom integration (HACS) in Home Assistant.') },

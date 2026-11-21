@@ -15,7 +15,7 @@ const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.15.3';
+const VERSION = process.env.HEARTH_VERSION || '0.15.4';
 
 // Add-on options (set on the add-on's Configuration tab in Home Assistant).
 let options = {};
@@ -847,31 +847,50 @@ async function probeGrocy(base) {
     return e.cause?.code || e.message;
   }
 }
+let grocyTried = [];
 async function resolveGrocy() {
   if (mock) return '';
   if (Date.now() - grocyCheckedAt < (grocyBase ? 10 * 60000 : 60000)) return grocyBase;
   grocyCheckedAt = Date.now();
   grocyNote = '';
+  grocyTried = [];
   if (GROCY.url) return (grocyBase = GROCY.url);
   if (!IN_ADDON) return (grocyBase = '');
+  // Candidates: what the Supervisor reports (if it lets us look), plus the usual Grocy add-on hostname.
+  const candidates = [];
   try {
-    const sup = (path_) => fetch(`http://supervisor${path_}`, { headers: { Authorization: `Bearer ${process.env.SUPERVISOR_TOKEN}` }, signal: AbortSignal.timeout(5000) }).then((r) => (r.ok ? r.json() : null));
+    const sup = (path_) =>
+      fetch(`http://supervisor${path_}`, { headers: { Authorization: `Bearer ${process.env.SUPERVISOR_TOKEN}` }, signal: AbortSignal.timeout(5000) }).then((r) => {
+        if (!r.ok) throw new Error(`Supervisor ${r.status}`);
+        return r.json();
+      });
     const list = (await sup('/addons'))?.data?.addons ?? [];
-    for (const a of list.filter((x) => /grocy/i.test(x.slug) && x.state === 'started')) {
-      const host = a.slug.replace(/_/g, '-');
-      const info = (await sup(`/addons/${a.slug}/info`).catch(() => null))?.data;
-      const ports = new Set([...Object.keys(info?.network || {}).map((k) => parseInt(k, 10)), 80, 9192, info?.ingress_port].filter(Boolean));
-      for (const port of ports) {
-        const base = `http://${host}:${port}`;
-        const r = await probeGrocy(base);
-        if (r === 'ok' || r === 'auth') {
-          grocyNote = `Found the ${a.name} add-on.`;
-          return (grocyBase = base);
-        }
+    for (const a of list.filter((x) => /grocy/i.test(x.slug))) {
+      if (a.state !== 'started') {
+        grocyTried.push(`${a.name} is ${a.state}`);
+        continue;
       }
+      const info = (await sup(`/addons/${a.slug}/info`).catch(() => null))?.data;
+      const ports = [...Object.keys(info?.network || {}).map((k) => parseInt(k, 10)), 80, 9192, info?.ingress_port].filter(Boolean);
+      candidates.push({ name: a.name, host: a.slug.replace(/_/g, '-'), ports });
     }
-  } catch {
-    /* no Supervisor access */
+  } catch (e) {
+    grocyTried.push(e.message);
+  }
+  candidates.push({ name: 'Grocy', host: 'a0d7b954-grocy', ports: [80, 9192, 1337] });
+  const seen = new Set();
+  for (const c of candidates) {
+    for (const port of c.ports) {
+      const base = `http://${c.host}:${port}`;
+      if (seen.has(base)) continue;
+      seen.add(base);
+      const r = await probeGrocy(base);
+      if (r === 'ok' || r === 'auth') {
+        grocyNote = `Found the ${c.name} add-on.`;
+        return (grocyBase = base);
+      }
+      grocyTried.push(`${c.host}:${port} ${r}`);
+    }
   }
   return (grocyBase = '');
 }
@@ -892,7 +911,7 @@ async function grocyApi(method, path_, body) {
 async function grocyStatus() {
   if (mock) return { configured: false, ok: false };
   const base = await resolveGrocy();
-  if (!base) return { configured: false, ok: false };
+  if (!base) return { configured: false, ok: false, tried: IN_ADDON ? grocyTried.join(', ') : undefined };
   if (!GROCY.key)
     return { configured: true, ok: false, needsKey: true, error: `${grocyNote || 'Found Grocy.'} Create an API key in Grocy (wrench icon → Manage API keys), paste it into “Grocy API key” on the Hearth add-on's Configuration tab, and restart Hearth.` };
   const r = await probeGrocy(base);

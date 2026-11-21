@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.4
+- **Grocy add-on detection:** if Home Assistant won't share its add-on list, Hearth now also tries the Grocy add-on's usual address directly.
+- When Hearth can't find Grocy, Settings → Integrations lists what it tried, to make the cause easy to spot.
+
 ## 0.15.3
 - **Several cameras on Today:** pick as many cameras as you like for the Today camera card under Settings → Cameras → Today screen. Each one plays live with its name; tap any of them for full screen. On a tablet they stack in the camera column; on a phone they sit two per row.
 - With more than one camera, each stream runs at a lower resolution to save bandwidth.
