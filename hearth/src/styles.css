@@ -375,7 +375,7 @@ html.kiosk .logo { cursor: default; }
 .np-btn { width: 40px; height: 40px; }
 
 /* ---------- calendar extras ---------- */
-.member-strip { display: flex; gap: 8px; flex-wrap: wrap; margin: -6px 0 12px; }
+.member-strip { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 12px; padding-top: 4px; flex-shrink: 0; }
 .countdown-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px; border: 1.5px solid var(--text); font-weight: 700; font-size: 14.5px; }
 .countdown-chip b { font-weight: 800; }
 .cd-emoji { font-size: 18px; }

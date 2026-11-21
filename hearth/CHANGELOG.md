@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.9.1
+- Fixed the countdown and per-person progress chips on Today, whose top edge was cut off.
+
 ## 0.9.0
 - **Music search:** search your Music Assistant library for songs, albums, playlists, and artists from the Music screen. Tap a song or artist to play it, or an album or playlist to see its songs.
 - **Collapsible Tasks:** fold a person's column into a slim strip that still shows their progress.
