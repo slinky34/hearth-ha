@@ -257,6 +257,18 @@ export function createMockHA() {
       return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c.color}"/><stop offset="1" stop-color="#1f2430"/></linearGradient></defs><rect width="400" height="300" fill="url(#g)"/><text x="200" y="185" font-size="120" text-anchor="middle">${c.emoji}</text></svg>`;
     },
     ws(type, payload) {
+      if (type === 'calendar/event/update' || type === 'calendar/event/delete') {
+        const i = created.findIndex((c) => c.cal === payload.entity_id && c.event.uid === payload.uid);
+        if (i < 0) return Promise.reject(new Error('This demo event is read-only (only events you add can be changed)'));
+        if (type === 'calendar/event/delete') created.splice(i, 1);
+        else {
+          const e = payload.event;
+          const start = e.dtstart.length > 10 ? { dateTime: e.dtstart } : { date: e.dtstart };
+          const end = e.dtend.length > 10 ? { dateTime: e.dtend } : { date: e.dtend };
+          created[i] = { cal: payload.entity_id, start, end, event: { uid: payload.uid, summary: e.summary, location: e.location, description: e.description, start, end } };
+        }
+        return Promise.resolve(null);
+      }
       if (type !== 'media_player/browse_media') return Promise.reject(new Error(`Mock ws: ${type}`));
       const id = String(payload.media_content_id || '');
       const m = id.match(/^library:\/\/(playlist|album)\/(\d+)$/);

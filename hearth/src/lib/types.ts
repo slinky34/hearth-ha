@@ -119,6 +119,8 @@ export interface CalEvent {
   calendar: string;
   /** Every calendar this event appears in (identical events across calendars are merged). */
   calendars: string[];
+  /** The underlying event in each calendar (needed to edit or delete it). */
+  copies: { calendar: string; uid?: string; recurrenceId?: string }[];
   /** Names from a "Who: …" line in the description (people tagged on a shared calendar). */
   people: string[];
   location?: string;

@@ -85,7 +85,7 @@ export function TodayView() {
   );
   const modals = (
     <>
-      {picked && <EventDetail event={picked} onClose={() => setPicked(null)} />}
+      {picked && <EventDetail event={picked} onClose={() => setPicked(null)} onChanged={reload} />}
       {adding && (
         <AddEvent
           defaultDate={today}

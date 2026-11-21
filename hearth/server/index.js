@@ -15,7 +15,7 @@ const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.7.0';
+const VERSION = process.env.HEARTH_VERSION || '0.8.0';
 
 // Add-on options (set on the add-on's Configuration tab in Home Assistant).
 let options = {};
@@ -347,6 +347,31 @@ async function route(req, res) {
     const buf = Buffer.from(await img.arrayBuffer());
     return send(res, 200, buf, { 'Content-Type': img.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'max-age=300' });
   }
+  // Edit / delete calendar events (HA only offers these over the websocket API).
+  match = p.match(/^\/api\/ha\/calendar_event\/(update|delete)$/);
+  if (match && m === 'POST') {
+    const b = await readJson(req);
+    if (!ENTITY_RE.test(b.entity_id || '') || !String(b.entity_id).startsWith('calendar.') || !b.uid)
+      return send(res, 400, { error: 'Bad event' });
+    const payload = {
+      entity_id: b.entity_id,
+      uid: String(b.uid),
+      ...(b.recurrence_id ? { recurrence_id: String(b.recurrence_id) } : {}),
+    };
+    if (match[1] === 'update') {
+      const e = b.event || {};
+      payload.event = {
+        summary: String(e.summary || '').slice(0, 500),
+        dtstart: e.dtstart,
+        dtend: e.dtend,
+        ...(e.location ? { location: String(e.location) } : {}),
+        ...(e.description ? { description: String(e.description) } : {}),
+      };
+    }
+    await haWs(`calendar/event/${match[1]}`, payload);
+    return send(res, 200, { ok: true });
+  }
+
   // Browse a media player's library (playlists, albums -> tracks), like HA's media browser.
   match = p.match(/^\/api\/ha\/browse\/(media_player\.[a-z0-9_]+)$/);
   if (match && m === 'GET') {

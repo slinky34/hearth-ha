@@ -50,6 +50,7 @@ function toEvent(e: HaEvent, calendar: string): CalEvent {
     allDay,
     calendar,
     calendars: [calendar],
+    copies: [{ calendar, uid: e.uid, recurrenceId: e.recurrence_id }],
     location: e.location || undefined,
     ...splitWho(e.description),
   };
@@ -92,6 +93,10 @@ export const api = {
     return r.service_response?.[entity]?.items ?? [];
   },
 
+  updateEvent: (calendar: string, uid: string, recurrenceId: string | undefined, event: Record<string, string>) =>
+    j(`api/ha/calendar_event/update`, post({ entity_id: calendar, uid, recurrence_id: recurrenceId, event })),
+  deleteEvent: (calendar: string, uid: string, recurrenceId: string | undefined) =>
+    j(`api/ha/calendar_event/delete`, post({ entity_id: calendar, uid, recurrence_id: recurrenceId })),
   store: () => j<{ rev: number; data: Partial<StoreData> }>('api/store'),
   putStore: (key: keyof StoreData, value: unknown) =>
     j<{ rev: number }>(`api/store/${key}`, { ...post({ value }), method: 'PUT' }),

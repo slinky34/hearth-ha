@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0
+- **Edit and delete events:** tap an event, then Edit or Delete.
+  - Edit reopens the form pre-filled, so you can change the title, time, location, calendars, or who's going.
+  - Picking or un-picking calendars adds the event to or removes it from them.
+  - Notes in the description are kept.
+  - Deleting an event that's in several calendars removes it from all of them.
+  - For a repeating event, only that one occurrence changes.
+- **Edit list items:** tap ✎ on an item to rename or delete it.
+
 ## 0.7.0
 - **Bar Assistant cocktails:** set the address and API token on the Configuration tab and a Cocktails tab appears in Recipes, with glass, method, and garnish, the ingredients, and step-by-step mixing mode.
 - **New events:**

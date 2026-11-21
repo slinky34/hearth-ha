@@ -87,6 +87,7 @@ export function useEvents(calendars: CalendarInfo[], start: Date, end: Date) {
       if (!prev) merged.set(k, { ...e });
       else {
         prev.calendars = [...new Set([...prev.calendars, ...e.calendars])];
+        prev.copies = [...prev.copies, ...e.copies];
         prev.people = [...new Set([...prev.people, ...e.people])];
       }
     }

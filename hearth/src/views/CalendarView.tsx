@@ -1,5 +1,5 @@
 import { addDays, addMonths, addWeeks, differenceInCalendarDays, endOfMonth, endOfWeek, isSameDay, isSameMonth, isToday, parseISO, startOfDay, startOfMonth, startOfWeek } from 'date-fns';
-import { ChevronLeft, ChevronRight, Clock, MapPin, Plus, RefreshCw } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, MapPin, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent } from 'react';
 import { Modal } from '../components/Modal';
 import { api, whoLine } from '../lib/api';
@@ -215,7 +215,7 @@ export function CalendarView() {
         <Plus size={26} />
       </button>
 
-      {picked && <EventDetail event={picked} onClose={() => setPicked(null)} />}
+      {picked && <EventDetail event={picked} onClose={() => setPicked(null)} onChanged={reload} />}
       {addOn && (
         <AddEvent
           defaultDate={addOn}
@@ -523,13 +523,55 @@ function TimeGrid({ days, events, onPick }: ViewProps & { days: Date[] }) {
   );
 }
 
-export function EventDetail({ event: e, onClose }: { event: CalEvent; onClose: () => void }) {
+export function EventDetail({ event: e, onClose, onChanged }: { event: CalEvent; onClose: () => void; onChanged?: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const editable = e.copies.some((c) => c.uid);
+  const remove = async () => {
+    if (!confirm(e.copies.length > 1 ? t('Delete “{title}” from all its calendars?', { title: e.title }) : t('Delete “{title}”?', { title: e.title }))) return;
+    setDeleting(true);
+    try {
+      for (const c of e.copies) if (c.uid) await api.deleteEvent(c.calendar, c.uid, c.recurrenceId);
+      onChanged?.();
+      onClose();
+    } catch (err) {
+      toast(t('Couldn’t delete: {error}', { error: (err as Error).message }));
+      setDeleting(false);
+    }
+  };
+  if (editing)
+    return (
+      <AddEvent
+        defaultDate={e.start}
+        existing={e}
+        onClose={() => setEditing(false)}
+        onCreated={() => {
+          onChanged?.();
+          onClose();
+        }}
+      />
+    );
   const { colorOf, calendars } = useHa();
   const { members, settings } = useStore().data;
   const who = eventMembers(e, members);
   const lastDay = addDays(e.end, -1);
   return (
-    <Modal title={e.title} onClose={onClose}>
+    <Modal
+      title={e.title}
+      onClose={onClose}
+      footer={
+        editable ? (
+          <>
+            <button className="btn ghost danger-text" onClick={remove} disabled={deleting}>
+              <Trash2 size={18} /> {t('Delete')}
+            </button>
+            <button className="btn primary" onClick={() => setEditing(true)}>
+              <Pencil size={18} /> {t('Edit')}
+            </button>
+          </>
+        ) : undefined
+      }
+    >
       <div className="detail">
         <p>
           <Clock size={18} />
@@ -565,21 +607,24 @@ export function EventDetail({ event: e, onClose }: { event: CalEvent; onClose: (
   );
 }
 
-export function AddEvent({ defaultDate, onClose, onCreated }: { defaultDate: Date; onClose: () => void; onCreated: () => void }) {
+export function AddEvent({ defaultDate, existing, onClose, onCreated }: { defaultDate: Date; existing?: CalEvent; onClose: () => void; onCreated: () => void }) {
   const { calendars, selected, colorOf } = useHa();
   const { members, settings } = useStore().data;
   const usable = calendars.filter((c) => !settings.hiddenCalendars.includes(c.entity_id));
   const preferred = members.find((m) => selected.includes(m.id))?.calendars[0] ?? usable[0]?.entity_id;
-  const [title, setTitle] = useState('');
-  const [cals, setCals] = useState<string[]>(preferred ? [preferred] : []);
-  const [people, setPeople] = useState<string[]>(selected);
-  const [allDay, setAllDay] = useState(false);
-  const [date, setDate] = useState(format(defaultDate, 'yyyy-MM-dd'));
-  const [endDate, setEndDate] = useState(format(defaultDate, 'yyyy-MM-dd'));
+  const ex = existing;
+  const tagged0 = ex ? members.filter((m) => ex.people.some((n) => n.trim().toLowerCase() === m.name.trim().toLowerCase())).map((m) => m.id) : selected;
+  const [title, setTitle] = useState(ex?.title ?? '');
+  const [cals, setCals] = useState<string[]>(ex ? [...new Set(ex.copies.map((c) => c.calendar))] : preferred ? [preferred] : []);
+  const [people, setPeople] = useState<string[]>(tagged0);
+  const [allDay, setAllDay] = useState(ex?.allDay ?? false);
+  const [date, setDate] = useState(format(ex?.start ?? defaultDate, 'yyyy-MM-dd'));
+  const [endDate, setEndDate] = useState(format(ex ? (ex.allDay ? addDays(ex.end, -1) : ex.end) : defaultDate, 'yyyy-MM-dd'));
   const nextHour = new Date().getHours() + 1;
-  const [startT, setStartT] = useState(`${String(Math.min(nextHour, 22)).padStart(2, '0')}:00`);
-  const [endT, setEndT] = useState(`${String(Math.min(nextHour + 1, 23)).padStart(2, '0')}:00`);
-  const [location, setLocation] = useState('');
+  const [startT, setStartT] = useState(ex && !ex.allDay ? format(ex.start, 'HH:mm') : `${String(Math.min(nextHour, 22)).padStart(2, '0')}:00`);
+  const [endT, setEndT] = useState(ex && !ex.allDay ? format(ex.end, 'HH:mm') : `${String(Math.min(nextHour + 1, 23)).padStart(2, '0')}:00`);
+  const [location, setLocation] = useState(ex?.location ?? '');
+  const notes = ex?.description ?? '';
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -599,7 +644,8 @@ export function AddEvent({ defaultDate, onClose, onCreated }: { defaultDate: Dat
     const base: Record<string, string> = { summary: title.trim() };
     if (location.trim()) base.location = location.trim();
     const tagged = members.filter((m) => people.includes(m.id) && !coveredByCalendar(m.id)).map((m) => m.name);
-    if (tagged.length) base.description = whoLine(tagged);
+    const description = [notes, tagged.length ? whoLine(tagged) : ''].filter(Boolean).join('\n\n');
+    if (description) base.description = description;
     if (allDay) {
       if (endDate < date) return setErr(t('End date is before the start date.'));
       base.start_date = date;
@@ -612,26 +658,53 @@ export function AddEvent({ defaultDate, onClose, onCreated }: { defaultDate: Dat
     setBusy(true);
     const failed: string[] = [];
     let lastError = '';
+    const note = (cal: string, e: unknown) => {
+      failed.push(calendars.find((c) => c.entity_id === cal)?.name ?? cal);
+      lastError = (e as Error).message;
+    };
+    // Editing uses the websocket event format (dtstart/dtend) with the local UTC offset.
+    const offset = (d: string, tm: string) => {
+      const m = -new Date(`${d}T${tm}`).getTimezoneOffset();
+      const a = Math.abs(m);
+      return `${m >= 0 ? '+' : '-'}${String(Math.floor(a / 60)).padStart(2, '0')}:${String(a % 60).padStart(2, '0')}`;
+    };
+    const wsEvent: Record<string, string> = {
+      summary: base.summary,
+      dtstart: allDay ? base.start_date : `${date}T${startT}:00${offset(date, startT)}`,
+      dtend: allDay ? base.end_date : `${date}T${endT}:00${offset(date, endT)}`,
+      ...(base.location ? { location: base.location } : {}),
+      ...(base.description ? { description: base.description } : {}),
+    };
     for (const cal of cals) {
+      const copy = ex?.copies.find((c) => c.calendar === cal && c.uid);
       try {
-        await api.service('calendar', 'create_event', { entity_id: cal, ...base });
+        if (copy) await api.updateEvent(cal, copy.uid!, copy.recurrenceId, wsEvent);
+        else await api.service('calendar', 'create_event', { entity_id: cal, ...base });
       } catch (e) {
-        failed.push(calendars.find((c) => c.entity_id === cal)?.name ?? cal);
-        lastError = (e as Error).message;
+        note(cal, e);
       }
     }
-    if (failed.length === cals.length) {
-      setErr(t('Couldn’t create the event: {error}. Some calendars (like subscribed ICS feeds) are read-only.', { error: lastError }));
+    // Calendars un-picked while editing: remove the event from them.
+    for (const copy of ex?.copies ?? []) {
+      if (cals.includes(copy.calendar) || !copy.uid) continue;
+      try {
+        await api.deleteEvent(copy.calendar, copy.uid, copy.recurrenceId);
+      } catch (e) {
+        note(copy.calendar, e);
+      }
+    }
+    if (failed.length && failed.length >= cals.length) {
+      setErr(t(ex ? 'Couldn’t save the event: {error}. Some calendars (like subscribed ICS feeds) are read-only.' : 'Couldn’t create the event: {error}. Some calendars (like subscribed ICS feeds) are read-only.', { error: lastError }));
       setBusy(false);
       return;
     }
-    if (failed.length) toast(t('Not added to: {names}', { names: failed.join(', ') }));
+    if (failed.length) toast(t(ex ? 'Not updated in: {names}' : 'Not added to: {names}', { names: failed.join(', ') }));
     onCreated();
   };
 
   return (
     <Modal
-      title={t('New event')}
+      title={ex ? t('Edit event') : t('New event')}
       onClose={onClose}
       footer={
         <>
@@ -639,7 +712,7 @@ export function AddEvent({ defaultDate, onClose, onCreated }: { defaultDate: Dat
             {t('Cancel')}
           </button>
           <button className="btn primary" onClick={save} disabled={busy}>
-            {busy ? t('Saving…') : t('Add event')}
+            {busy ? t('Saving…') : ex ? t('Save') : t('Add event')}
           </button>
         </>
       }

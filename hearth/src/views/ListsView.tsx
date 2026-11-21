@@ -1,5 +1,5 @@
 import { parseISO } from 'date-fns';
-import { Check, ChevronDown, Plus, RefreshCw } from 'lucide-react';
+import { Check, ChevronDown, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { useGrocy } from '../lib/grocy';
@@ -125,6 +125,21 @@ function TodoCard({ entity, name }: { entity: string; name: string }) {
     run(() => api.service('todo', 'add_item', { entity_id: entity, item }));
   };
 
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const rename = (it: TodoItem) => {
+    const v = draft.trim();
+    setEditing(null);
+    if (!v || v === it.summary) return;
+    setItems((p) => p.map((x) => (x.uid === it.uid ? { ...x, summary: v } : x)));
+    run(() => api.service('todo', 'update_item', { entity_id: entity, item: it.uid, rename: v }));
+  };
+  const remove = (it: TodoItem) => {
+    setEditing(null);
+    setItems((p) => p.filter((x) => x.uid !== it.uid));
+    run(() => api.service('todo', 'remove_item', { entity_id: entity, item: it.uid }));
+  };
+
   const toggle = (it: TodoItem) => {
     const status = it.status === 'completed' ? 'needs_action' : 'completed';
     setItems((p) => p.map((x) => (x.uid === it.uid ? { ...x, status } : x)));
@@ -155,12 +170,46 @@ function TodoCard({ entity, name }: { entity: string; name: string }) {
       </form>
       {err && <p className="error small">{err}</p>}
       <div className="todo-items">
-        {open.map((it) => (
-          <button key={it.uid} className="todo-item" onClick={() => toggle(it)}>
-            <span className="check" />
-            <ItemText summary={it.summary} />
-          </button>
-        ))}
+        {open.map((it) =>
+          editing === it.uid ? (
+            <form
+              key={it.uid}
+              className="todo-edit"
+              onSubmit={(e) => {
+                e.preventDefault();
+                rename(it);
+              }}
+            >
+              <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setEditing(null)} />
+              <button className="btn small primary" type="submit">
+                {t('Save')}
+              </button>
+              <button className="icon-btn" type="button" onClick={() => remove(it)} aria-label={t('Delete')}>
+                <Trash2 size={18} />
+              </button>
+              <button className="icon-btn" type="button" onClick={() => setEditing(null)} aria-label={t('Cancel')}>
+                <X size={18} />
+              </button>
+            </form>
+          ) : (
+            <div key={it.uid} className="todo-row">
+              <button className="todo-item" onClick={() => toggle(it)}>
+                <span className="check" />
+                <ItemText summary={it.summary} />
+              </button>
+              <button
+                className="icon-btn item-edit"
+                onClick={() => {
+                  setEditing(it.uid);
+                  setDraft(it.summary);
+                }}
+                aria-label={t('Edit')}
+              >
+                <Pencil size={16} />
+              </button>
+            </div>
+          ),
+        )}
         {open.length === 0 && !loading && <p className="muted center">{t('All clear')} ✨</p>}
       </div>
       {done.length > 0 && (
