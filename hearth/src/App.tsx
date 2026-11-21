@@ -125,6 +125,17 @@ function Shell() {
     history.replaceState(null, '', `${location.search}#${tab}`);
   }, [tab]);
 
+  // Settings → Screensaver → Preview.
+  const [previewStyle, setPreviewStyle] = useState<string | null>(null);
+  useEffect(() => {
+    const go = (e: Event) => {
+      setPreviewStyle((e as CustomEvent<string>).detail);
+      setIdle(true);
+    };
+    window.addEventListener('hearth:screensaver', go);
+    return () => window.removeEventListener('hearth:screensaver', go);
+  }, [setIdle]);
+
   // Other screens can ask to open a recipe.
   useEffect(() => {
     const go = (e: Event) => {
@@ -205,7 +216,7 @@ function Shell() {
           {tab === 'settings' && !kiosk && <SettingsView />}
         </div>
       </main>
-      {idle && <Screensaver onClose={() => setIdle(false)} />}
+      {idle && <Screensaver styleOverride={previewStyle ?? undefined} onClose={() => { setIdle(false); setPreviewStyle(null); }} />}
       {exiting && <ExitKiosk onClose={() => setExiting(false)} />}
       <Reminders />
       <TimerAlarm />

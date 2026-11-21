@@ -26,6 +26,10 @@ export const DEFAULT_SETTINGS: Settings = {
   palette: 'hearth',
   language: 'auto',
   immich: { albums: [], favorites: false },
+  screensaverStyle: 'kenburns',
+  ssShuffle: true,
+  ssClock: true,
+  ssInfo: true,
 };
 
 function normalize(raw: Partial<StoreData>): StoreData {

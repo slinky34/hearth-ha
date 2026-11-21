@@ -1,4 +1,4 @@
-import { Lock, Plus, Trash2 } from 'lucide-react';
+import { Lock, Play, Plus, Trash2 } from 'lucide-react';
 import { useHa } from '../lib/ha';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
@@ -10,6 +10,7 @@ import { EntityPicker } from '../components/EntityPicker';
 import { Section } from '../components/Section';
 import { Integrations } from '../components/Integrations';
 import { ImmichSettings } from '../components/ImmichSettings';
+import { SS_STYLES } from './Screensaver';
 import { useStore } from '../lib/store';
 import type { Member, Settings } from '../lib/types';
 import { PALETTE, initials, uid } from '../lib/util';
@@ -200,27 +201,6 @@ export function SettingsView() {
             </select>
           </label>
           <label>
-            {t('Screensaver after')}
-            <select value={settings.screensaverMinutes} onChange={(e) => s('screensaverMinutes', Number(e.target.value))}>
-              <option value={0}>{t('Never')}</option>
-              {[2, 5, 10, 15, 30, 60].map((n) => (
-                <option key={n} value={n}>
-                  {t('{n} minutes idle', { n })}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t('Photo every')}
-            <select value={settings.photoSeconds} onChange={(e) => s('photoSeconds', Number(e.target.value))}>
-              {[6, 12, 20, 30, 60].map((n) => (
-                <option key={n} value={n}>
-                  {t('{n} seconds', { n })}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
             {t('Day view starts at')}
             <select value={settings.dayStartHour} onChange={(e) => s('dayStartHour', Number(e.target.value))}>
               {[5, 6, 7, 8, 9].map((n) => (
@@ -399,6 +379,57 @@ export function SettingsView() {
           {t('To use a different folder, change Photo folder on the Hearth add-on’s Configuration tab (anything under /media or /share, e.g. /media/Photos/Family), then restart the add-on.')}
         </p>
         <ImmichSettings />
+      </Section>
+
+      <Section id="screensaver" title={t('Screensaver')} summary={t(SS_STYLES.find((x) => x.id === settings.screensaverStyle)?.label ?? 'Ken Burns')}>
+        <div className="ss-style-grid">
+          {SS_STYLES.map((st) => (
+            <button key={st.id} className={`ss-style ${settings.screensaverStyle === st.id ? 'on' : ''}`} onClick={() => s('screensaverStyle', st.id)}>
+              <span>{st.icon}</span>
+              <span>{t(st.label)}</span>
+            </button>
+          ))}
+        </div>
+        <div>
+          <button className="btn primary" onClick={() => window.dispatchEvent(new CustomEvent('hearth:screensaver', { detail: settings.screensaverStyle }))}>
+            <Play size={18} /> {t('Preview')}
+          </button>
+        </div>
+        <div className="settings-grid">
+          <label>
+            {t('Screensaver after')}
+            <select value={settings.screensaverMinutes} onChange={(e) => s('screensaverMinutes', Number(e.target.value))}>
+              <option value={0}>{t('Never')}</option>
+              {[2, 5, 10, 15, 30, 60].map((n) => (
+                <option key={n} value={n}>
+                  {t('{n} minutes idle', { n })}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t('Photo every')}
+            <select value={settings.photoSeconds} onChange={(e) => s('photoSeconds', Number(e.target.value))}>
+              {[6, 12, 20, 30, 60].map((n) => (
+                <option key={n} value={n}>
+                  {t('{n} seconds', { n })}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="row check-row">
+            <input type="checkbox" checked={settings.ssShuffle} onChange={(e) => s('ssShuffle', e.target.checked)} />
+            {t('Shuffle photos')}
+          </label>
+          <label className="row check-row">
+            <input type="checkbox" checked={settings.ssClock} onChange={(e) => s('ssClock', e.target.checked)} />
+            {t('Show clock')}
+          </label>
+          <label className="row check-row">
+            <input type="checkbox" checked={settings.ssInfo} onChange={(e) => s('ssInfo', e.target.checked)} />
+            {t('Show weather, next events, and music')}
+          </label>
+        </div>
       </Section>
 
       <Section id="kiosk-mode" title={t('Kiosk mode')}>

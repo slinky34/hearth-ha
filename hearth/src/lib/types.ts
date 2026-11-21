@@ -57,6 +57,11 @@ export interface Settings {
   palette: string;
   /** 'auto' follows the device language */
   language: string;
+  /** Screensaver look (see SS_STYLES) and options. */
+  screensaverStyle: string;
+  ssShuffle: boolean;
+  ssClock: boolean;
+  ssInfo: boolean;
   /** Immich photo sources (albums by id, plus favorites). */
   immich: { albums: string[]; favorites: boolean };
   choreLayout: 'cards' | 'compact';

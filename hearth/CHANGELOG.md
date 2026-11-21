@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.0
+- **Screensaver styles:** Ken Burns, Classic, Floating, Photo Wall, Vintage Prints, Sliding Panels, Flip-up, Reflections, Photo Mobile, or Random (a different one each time).
+- New **Settings → Screensaver** section:
+  - The style picker and a **Preview** button.
+  - Idle time and photo interval.
+  - Shuffle or in-order photos.
+  - On/off switches for the clock and for the weather/next events/music corner.
+
 ## 0.10.0
 - **Photos from Immich:**
   - Set the Immich address and API key on the Configuration tab.
