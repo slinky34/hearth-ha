@@ -1,45 +1,126 @@
 import {
-  addDays, addMonths, addWeeks, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, isToday,
-  parseISO, startOfDay, startOfMonth, startOfWeek,
+  addDays, addMonths, addWeeks, differenceInCalendarDays, endOfMonth, endOfWeek, format, isSameDay, isSameMonth,
+  isToday, parseISO, startOfDay, startOfMonth, startOfWeek,
 } from 'date-fns';
 import { ChevronLeft, ChevronRight, Clock, MapPin, Plus, RefreshCw } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent } from 'react';
 import { Modal } from '../components/Modal';
 import { api } from '../lib/api';
 import { useEvents, useHa } from '../lib/ha';
 import { useNow } from '../lib/hooks';
 import { useStore } from '../lib/store';
-import type { CalEvent } from '../lib/types';
-import { dateKey, fmtShortTime, fmtTime, tint } from '../lib/util';
+import type { CalEvent, CalendarViewMode, Member } from '../lib/types';
+import { dateKey, dueOn, fmtShortTime, fmtTime, initials, pastel, stripes } from '../lib/util';
 import { useWeather, weatherIcon } from '../lib/weather';
 
-type ViewMode = 'day' | 'week' | 'month';
-
 const overlapsDay = (e: CalEvent, d: Date) => e.start < addDays(startOfDay(d), 1) && e.end > startOfDay(d);
+
+const MODES: { id: CalendarViewMode; label: string }[] = [
+  { id: 'day', label: 'Day' },
+  { id: 'week', label: 'Week' },
+  { id: 'schedule', label: 'Schedule' },
+  { id: 'grid', label: 'Grid' },
+  { id: 'month', label: 'Month' },
+];
+
+/** Colors and people for an event: one person = their pastel, several = stripes. */
+export function useEventLook() {
+  const { members } = useStore().data;
+  const { colorOf } = useHa();
+  return (e: CalEvent) => {
+    const who = members.filter((m) => m.calendars.includes(e.calendar));
+    const colors = who.length ? who.map((m) => m.color) : [colorOf(e.calendar)];
+    const style: CSSProperties = colors.length > 1 ? { background: stripes(colors) } : { background: pastel(colors[0], 0.42) };
+    return { who, style, color: colors[0] };
+  };
+}
+
+export function Badges({ who, max = 3 }: { who: Member[]; max?: number }) {
+  if (!who.length) return null;
+  return (
+    <span className="badges">
+      {who.slice(0, max).map((m) => (
+        <span key={m.id} className="badge" style={{ background: m.color }} title={m.name}>
+          {initials(m.name).slice(0, 1)}
+        </span>
+      ))}
+      {who.length > max && <span className="badge more">+{who.length - max}</span>}
+    </span>
+  );
+}
+
+/** Countdown chips and each person's chore progress for today (tap a person to filter). */
+export function MemberStrip() {
+  const { members, chores, completions, settings } = useStore().data;
+  const { selected, setSelected } = useHa();
+  const today = startOfDay(new Date());
+  const done = new Set(completions[dateKey(today)] ?? []);
+  const countdowns = settings.countdowns
+    .map((c) => ({ ...c, days: differenceInCalendarDays(parseISO(c.date), today) }))
+    .filter((c) => c.days >= 0)
+    .sort((a, b) => a.days - b.days)
+    .slice(0, 2);
+  if (!members.length && !countdowns.length) return null;
+  return (
+    <div className="member-strip">
+      {countdowns.map((c) => (
+        <span key={c.id} className="countdown-chip">
+          <span className="cd-emoji">{c.emoji || '⏳'}</span> {c.title}{' '}
+          <b>{c.days === 0 ? 'today!' : `${c.days} day${c.days === 1 ? '' : 's'}`}</b>
+        </span>
+      ))}
+      {members.map((m) => {
+        const due = chores.filter((c) => c.memberId === m.id && dueOn(c, today));
+        const n = due.filter((c) => done.has(c.id)).length;
+        const pct = due.length ? (n / due.length) * 100 : 0;
+        const on = selected.includes(m.id);
+        return (
+          <button
+            key={m.id}
+            className={`member-chip ${on ? 'on' : ''} ${selected.length && !on ? 'dim' : ''}`}
+            style={{
+              background: `linear-gradient(to right, ${pastel(m.color, 0.55)} ${pct}%, ${pastel(m.color, 0.2)} ${pct}%)`,
+              borderColor: on ? m.color : 'transparent',
+            }}
+            onClick={() => setSelected(on ? selected.filter((x) => x !== m.id) : [...selected, m.id])}
+          >
+            <span className="badge" style={{ background: m.color }}>
+              {initials(m.name).slice(0, 1)}
+            </span>
+            {m.name} <span className="chip-count">{n}/{due.length}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export function CalendarView() {
   const { data } = useStore();
   const { visibleCalendars, calendars, error: haError } = useHa();
-  const { weekStartsOn } = data.settings;
-  const [mode, setMode] = useState<ViewMode>('week');
+  const { weekStartsOn, gridDays } = data.settings;
+  const [mode, setMode] = useState<CalendarViewMode>(data.settings.calendarView);
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
   const [picked, setPicked] = useState<CalEvent | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [addOn, setAddOn] = useState<Date | null>(null);
 
   const range = useMemo(() => {
     if (mode === 'day') return { start: cursor, end: addDays(cursor, 1) };
-    if (mode === 'week') {
+    if (mode === 'grid' && gridDays === 5) return { start: cursor, end: addDays(cursor, 5) };
+    if (mode !== 'month') {
       const start = startOfWeek(cursor, { weekStartsOn });
       return { start, end: addDays(start, 7) };
     }
     const start = startOfWeek(startOfMonth(cursor), { weekStartsOn });
     return { start, end: startOfDay(addDays(endOfWeek(endOfMonth(cursor), { weekStartsOn }), 1)) };
-  }, [mode, cursor, weekStartsOn]);
+  }, [mode, cursor, weekStartsOn, gridDays]);
 
   const { events, error, loading, reload } = useEvents(visibleCalendars, range.start, range.end);
 
   const step = (dir: 1 | -1) =>
-    setCursor((c) => (mode === 'day' ? addDays(c, dir) : mode === 'week' ? addWeeks(c, dir) : addMonths(c, dir)));
+    setCursor((c) =>
+      mode === 'day' ? addDays(c, dir) : mode === 'month' ? addMonths(c, dir) : mode === 'grid' && gridDays === 5 ? addDays(c, 5 * dir) : addWeeks(c, dir),
+    );
 
   // Horizontal swipe to change period on touch screens.
   const swipe = useRef<{ x: number; y: number } | null>(null);
@@ -56,14 +137,15 @@ export function CalendarView() {
   const title = (() => {
     if (mode === 'day') return format(cursor, 'EEEE, MMMM d');
     if (mode === 'month') return format(cursor, 'MMMM yyyy');
-    const last = addDays(range.start, 6);
-    return `${format(range.start, 'MMM d')} – ${format(last, isSameMonth(range.start, last) ? 'd' : 'MMM d')}, ${format(last, 'yyyy')}`;
+    const last = addDays(range.end, -1);
+    return `${format(range.start, 'MMM d')} – ${format(last, isSameMonth(range.start, last) ? 'd' : 'MMM d')}`;
   })();
 
   const openDay = (d: Date) => {
     setCursor(startOfDay(d));
     setMode('day');
   };
+  const days = (n: number) => Array.from({ length: n }, (_, i) => addDays(range.start, i));
 
   return (
     <div className="calendar">
@@ -83,17 +165,15 @@ export function CalendarView() {
         </div>
         <div className="nav-group">
           <div className="segmented">
-            {(['day', 'week', 'month'] as const).map((m) => (
-              <button key={m} className={mode === m ? 'on' : ''} onClick={() => setMode(m)}>
-                {m[0].toUpperCase() + m.slice(1)}
+            {MODES.map((m) => (
+              <button key={m.id} className={mode === m.id ? 'on' : ''} onClick={() => setMode(m.id)}>
+                {m.label}
               </button>
             ))}
           </div>
-          <button className="btn primary" onClick={() => setAdding(true)} disabled={calendars.length === 0}>
-            <Plus size={20} /> Event
-          </button>
         </div>
       </div>
+      <MemberStrip />
 
       {(haError || error) && (
         <div className="banner" onClick={reload}>
@@ -103,19 +183,39 @@ export function CalendarView() {
 
       <div className="calendar-body" onPointerDown={onDown} onPointerUp={onUp}>
         {mode === 'week' && <WeekView start={range.start} events={events} onPick={setPicked} onDay={openDay} />}
+        {mode === 'schedule' && (
+          <ScheduleView
+            start={range.start}
+            events={events}
+            onPick={setPicked}
+            onDay={openDay}
+            onAdd={(d) => setAddOn(d)}
+            onNext={() => step(1)}
+          />
+        )}
+        {mode === 'grid' && <TimeGrid days={days(gridDays === 5 ? 5 : 7)} events={events} onPick={setPicked} />}
         {mode === 'month' && (
           <MonthView start={range.start} end={range.end} cursor={cursor} events={events} onPick={setPicked} onDay={openDay} />
         )}
-        {mode === 'day' && <DayView day={cursor} events={events} onPick={setPicked} />}
+        {mode === 'day' && <TimeGrid days={[cursor]} events={events} onPick={setPicked} />}
       </div>
 
+      <button
+        className="fab"
+        onClick={() => setAddOn(mode === 'day' ? cursor : new Date())}
+        aria-label="Add event"
+        disabled={calendars.length === 0}
+      >
+        <Plus size={26} />
+      </button>
+
       {picked && <EventDetail event={picked} onClose={() => setPicked(null)} />}
-      {adding && (
+      {addOn && (
         <AddEvent
-          defaultDate={mode === 'day' ? cursor : new Date()}
-          onClose={() => setAdding(false)}
+          defaultDate={addOn}
+          onClose={() => setAddOn(null)}
           onCreated={() => {
-            setAdding(false);
+            setAddOn(null);
             reload();
           }}
         />
@@ -129,35 +229,49 @@ interface ViewProps {
   onPick: (e: CalEvent) => void;
 }
 
-function EventCard({ e, onPick, compact }: { e: CalEvent; onPick: (e: CalEvent) => void; compact?: boolean }) {
-  const { colorOf } = useHa();
+/** Skylight-style event pill: pastel (or striped) with people badges. */
+function EventPill({ e, onPick, showTime = true }: { e: CalEvent; onPick: (e: CalEvent) => void; showTime?: boolean }) {
+  const look = useEventLook();
   const { clock24 } = useStore().data.settings;
-  const color = colorOf(e.calendar);
+  const { who, style } = look(e);
+  return (
+    <button className={`ev-pill ${!e.allDay && e.end < new Date() ? 'past' : ''}`} style={style} onClick={() => onPick(e)}>
+      <span className="ev-pill-text">
+        <span className="ev-title">{e.title}</span>
+        {showTime && (
+          <span className="ev-time">
+            {e.allDay ? 'All day' : `${fmtShortTime(e.start, clock24)} – ${fmtShortTime(e.end, clock24)}`}
+          </span>
+        )}
+      </span>
+      <Badges who={who} />
+    </button>
+  );
+}
+
+function CompactEvent({ e, onPick }: { e: CalEvent; onPick: (e: CalEvent) => void }) {
+  const look = useEventLook();
+  const { clock24 } = useStore().data.settings;
+  const { style, color } = look(e);
   if (e.allDay)
     return (
-      <button className="ev-allday" style={{ background: color }} onClick={() => onPick(e)}>
+      <button className="ev-allday" style={style} onClick={() => onPick(e)}>
         {e.title}
       </button>
     );
-  if (compact)
-    return (
-      <button className="ev-compact" onClick={() => onPick(e)}>
-        <i style={{ background: color }} />
-        <span className="ev-time">{fmtShortTime(e.start, clock24)}</span> {e.title}
-      </button>
-    );
   return (
-    <button
-      className={`ev-card ${e.end < new Date() ? 'past' : ''}`}
-      style={{ background: tint(color, 0.16), borderLeftColor: color }}
-      onClick={() => onPick(e)}
-    >
-      <span className="ev-time">
-        {fmtShortTime(e.start, clock24)} – {fmtShortTime(e.end, clock24)}
-      </span>
-      <span className="ev-title">{e.title}</span>
-      {e.location && <span className="ev-loc">{e.location}</span>}
+    <button className="ev-compact" onClick={() => onPick(e)}>
+      <i style={{ background: color }} />
+      <span className="ev-time">{fmtShortTime(e.start, clock24)}</span> {e.title}
     </button>
+  );
+}
+
+function DayNum({ d }: { d: Date }) {
+  return (
+    <span className="day-label">
+      {format(d, 'EEE')} <span className={`dnum-inline ${isToday(d) ? 'today' : ''}`}>{format(d, 'd')}</span>
+    </span>
   );
 }
 
@@ -184,8 +298,8 @@ function WeekView({ start, events, onPick, onDay }: ViewProps & { start: Date; o
               )}
             </button>
             <div className="week-body">
-              {dayEvents.filter((e) => e.allDay).map((e) => <EventCard key={e.id} e={e} onPick={onPick} />)}
-              {dayEvents.filter((e) => !e.allDay).map((e) => <EventCard key={e.id} e={e} onPick={onPick} />)}
+              {dayEvents.filter((e) => e.allDay).map((e) => <EventPill key={e.id} e={e} onPick={onPick} />)}
+              {dayEvents.filter((e) => !e.allDay).map((e) => <EventPill key={e.id} e={e} onPick={onPick} />)}
             </div>
             {dinner && (
               <div className="meal-foot" title="Dinner">
@@ -195,6 +309,47 @@ function WeekView({ start, events, onPick, onDay }: ViewProps & { start: Date; o
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function ScheduleView({
+  start, events, onPick, onDay, onAdd, onNext,
+}: ViewProps & { start: Date; onDay: (d: Date) => void; onAdd: (d: Date) => void; onNext: () => void }) {
+  const days = Array.from({ length: 7 }, (_, i) => addDays(start, i));
+  const today = startOfDay(new Date());
+  return (
+    <div className="schedule">
+      {days.map((d) => {
+        const dayEvents = events.filter((e) => overlapsDay(e, d));
+        const sorted = [...dayEvents.filter((e) => e.allDay), ...dayEvents.filter((e) => !e.allDay)];
+        return (
+          <section key={d.toISOString()} className={`sched-day ${d < today ? 'past' : ''}`}>
+            <header>
+              <button className="sched-title" onClick={() => onDay(d)}>
+                <DayNum d={d} />
+              </button>
+              <div className="sched-sub">
+                <span className="muted">
+                  {sorted.length} event{sorted.length === 1 ? '' : 's'}
+                </span>
+                <button className="link add-link" onClick={() => onAdd(d)}>
+                  + Add event
+                </button>
+              </div>
+            </header>
+            <div className="sched-events">
+              {sorted.map((e) => <EventPill key={e.id} e={e} onPick={onPick} />)}
+            </div>
+          </section>
+        );
+      })}
+      <button className="sched-day next-week" onClick={onNext}>
+        <span className="day-label">Next week</span>
+        <span className="muted">
+          {format(addDays(start, 7), 'MMMM d')} – {format(addDays(start, 13), 'd')}
+        </span>
+      </button>
     </div>
   );
 }
@@ -222,7 +377,7 @@ function MonthView({
           >
             <span className="dnum">{format(d, 'd')}</span>
             <div className="month-events" onClick={(ev) => ev.stopPropagation()}>
-              {sorted.slice(0, 3).map((e) => <EventCard key={e.id} e={e} onPick={onPick} compact />)}
+              {sorted.slice(0, 3).map((e) => <CompactEvent key={e.id} e={e} onPick={onPick} />)}
               {sorted.length > 3 && (
                 <button className="more" onClick={() => onDay(d)}>
                   +{sorted.length - 3} more
@@ -236,7 +391,7 @@ function MonthView({
   );
 }
 
-const HOUR = 64;
+const HOUR = 62;
 
 function layoutDay(timed: CalEvent[], day: Date) {
   const s0 = startOfDay(day).getTime();
@@ -267,73 +422,95 @@ function layoutDay(timed: CalEvent[], day: Date) {
   return out;
 }
 
-function DayView({ day, events, onPick }: ViewProps & { day: Date }) {
-  const { colorOf } = useHa();
+/** Hour grid for one or more days, with an all-day row on top. */
+function TimeGrid({ days, events, onPick }: ViewProps & { days: Date[] }) {
   const { settings, meals } = useStore().data;
+  const look = useEventLook();
   const now = useNow(60000);
   const scroller = useRef<HTMLDivElement>(null);
-  const dayEvents = events.filter((e) => overlapsDay(e, day));
-  const allDay = dayEvents.filter((e) => e.allDay);
-  const placed = layoutDay(dayEvents.filter((e) => !e.allDay), day);
-  const meal = meals[dateKey(day)];
-  const s0 = startOfDay(day).getTime();
+  const single = days.length === 1;
+  const cols = `64px repeat(${days.length}, minmax(${single ? 200 : 120}px, 1fr))`;
+  const showsToday = days.some((d) => isSameDay(d, new Date()));
 
   useEffect(() => {
-    const h = isSameDay(day, new Date()) ? Math.max(0, new Date().getHours() - 1) : settings.dayStartHour;
+    const h = showsToday ? Math.max(0, new Date().getHours() - 1) : settings.dayStartHour;
     scroller.current?.scrollTo({ top: h * HOUR });
-  }, [day, settings.dayStartHour]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [days[0]?.getTime(), settings.dayStartHour]);
+
+  const meal = single ? meals[dateKey(days[0])] : undefined;
 
   return (
-    <div className="day">
-      {(allDay.length > 0 || meal) && (
-        <div className="day-top">
-          {allDay.map((e) => <EventCard key={e.id} e={e} onPick={onPick} />)}
-          {meal &&
-            (['breakfast', 'lunch', 'dinner'] as const)
-              .filter((k) => meal[k])
-              .map((k) => (
-                <span key={k} className="meal-pill">
-                  {k === 'breakfast' ? '🥣' : k === 'lunch' ? '🥪' : '🍽️'} {meal[k]}
-                </span>
-              ))}
-        </div>
-      )}
-      <div className="day-grid" ref={scroller}>
-        <div className="day-inner" style={{ height: 24 * HOUR }}>
-          {Array.from({ length: 24 }, (_, h) => (
-            <div key={h} className="hour" style={{ top: h * HOUR }}>
-              <span>{h === 0 ? '' : fmtShortTime(new Date(2000, 0, 1, h), settings.clock24)}</span>
-            </div>
-          ))}
-          <div className="day-events">
-            {placed.map(({ e, s, en, col, cols }) => {
-              const color = colorOf(e.calendar);
-              return (
-                <button
-                  key={e.id}
-                  className="ev-block"
-                  style={{
-                    top: ((s - s0) / 3600000) * HOUR,
-                    height: Math.max(((en - s) / 3600000) * HOUR - 3, 26),
-                    left: `${(col / cols) * 100}%`,
-                    width: `calc(${100 / cols}% - 6px)`,
-                    background: tint(color, 0.18),
-                    borderLeftColor: color,
-                  }}
-                  onClick={() => onPick(e)}
-                >
-                  <span className="ev-title">{e.title}</span>
-                  <span className="ev-time">
-                    {fmtShortTime(e.start, settings.clock24)} – {fmtShortTime(e.end, settings.clock24)}
-                    {e.location ? ` · ${e.location}` : ''}
-                  </span>
+    <div className="tgrid">
+      <div className="tgrid-head" style={{ gridTemplateColumns: cols }}>
+        <div />
+        {days.map((d) => {
+          const allDay = events.filter((e) => e.allDay && overlapsDay(e, d));
+          return (
+            <div key={d.toISOString()} className="tgrid-day">
+              {!single && <DayNum d={d} />}
+              {allDay.map((e) => (
+                <button key={e.id} className="ev-allday" style={look(e).style} onClick={() => onPick(e)}>
+                  {e.title}
                 </button>
-              );
-            })}
-            {isSameDay(day, now) && (
-              <div className="now-line" style={{ top: ((now.getTime() - s0) / 3600000) * HOUR }} />
-            )}
+              ))}
+              {meal &&
+                (['breakfast', 'lunch', 'dinner'] as const)
+                  .filter((k) => meal[k])
+                  .map((k) => (
+                    <span key={k} className="meal-pill">
+                      {k === 'breakfast' ? '🥣' : k === 'lunch' ? '🥪' : '🍽️'} {meal[k]}
+                    </span>
+                  ))}
+            </div>
+          );
+        })}
+      </div>
+      <div className="tgrid-scroll" ref={scroller}>
+        <div className="tgrid-body" style={{ gridTemplateColumns: cols, height: 24 * HOUR }}>
+          <div className="tgrid-hours">
+            {Array.from({ length: 24 }, (_, h) => (
+              <span key={h} style={{ top: h * HOUR }}>
+                {h === 0 ? '' : fmtShortTime(new Date(2000, 0, 1, h), settings.clock24)}
+              </span>
+            ))}
           </div>
+          {days.map((d) => {
+            const s0 = startOfDay(d).getTime();
+            const placed = layoutDay(events.filter((e) => !e.allDay && overlapsDay(e, d)), d);
+            return (
+              <div key={d.toISOString()} className={`tgrid-col ${isToday(d) ? 'today' : ''}`}>
+                {Array.from({ length: 24 }, (_, h) => (
+                  <i key={h} className="hline" style={{ top: h * HOUR }} />
+                ))}
+                {placed.map(({ e, s, en, col, cols: n }) => {
+                  const { who, style } = look(e);
+                  const short = en - s < 50 * 60000;
+                  return (
+                    <button
+                      key={e.id}
+                      className={`ev-block ${short ? 'short' : ''} ${e.end < now ? 'past' : ''}`}
+                      style={{
+                        ...style,
+                        top: ((s - s0) / 3600000) * HOUR + 1,
+                        height: Math.max(((en - s) / 3600000) * HOUR - 3, 24),
+                        left: `calc(${(col / n) * 100}% + 2px)`,
+                        width: `calc(${100 / n}% - 5px)`,
+                      }}
+                      onClick={() => onPick(e)}
+                    >
+                      <span className="ev-title">{e.title}</span>
+                      <span className="ev-time">
+                        {fmtShortTime(e.start, settings.clock24)} – {fmtShortTime(e.end, settings.clock24)}
+                      </span>
+                      <Badges who={who} max={2} />
+                    </button>
+                  );
+                })}
+                {isSameDay(d, now) && <div className="now-line" style={{ top: ((now.getTime() - s0) / 3600000) * HOUR }} />}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

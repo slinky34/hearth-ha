@@ -7,6 +7,7 @@ import { useStore } from '../lib/store';
 import { fmtShortTime } from '../lib/util';
 import { useWeather, weatherIcon } from '../lib/weather';
 import { usePhotos } from './PhotosView';
+import { isActive, useMusic } from '../lib/music';
 
 function shuffle<T>(a: T[]) {
   const b = [...a];
@@ -23,6 +24,7 @@ export function Screensaver({ onClose }: { onClose: () => void }) {
   const weather = useWeather();
   const now = useNow(5000);
   const { photos } = usePhotos();
+  const { active } = useMusic();
   const order = useMemo(() => shuffle(photos), [photos]);
   const [i, setI] = useState(0);
 
@@ -64,6 +66,12 @@ export function Screensaver({ onClose }: { onClose: () => void }) {
           {weather && (
             <div className="ss-weather">
               {weatherIcon(weather.condition)} {weather.temp != null && `${weather.temp}°`}
+            </div>
+          )}
+          {isActive(active) && (
+            <div className="ss-event ss-music">
+              <span>{active!.state === 'playing' ? '♫' : '❚❚'}</span> {active!.title}
+              {active!.artist ? ` · ${active!.artist}` : ''}
             </div>
           )}
           {upcoming.map((e) => (

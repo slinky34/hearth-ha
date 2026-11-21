@@ -1,6 +1,7 @@
 import { addDays, addWeeks, format, isToday, startOfWeek } from 'date-fns';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+import { useGrocy } from '../lib/grocy';
 import { useStore } from '../lib/store';
 import type { MealType } from '../lib/types';
 import { dateKey } from '../lib/util';
@@ -17,6 +18,13 @@ export function MealsView() {
   const [editing, setEditing] = useState<string | null>(null); // `${dateKey}|${meal}`
   const [draft, setDraft] = useState('');
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const { grocy } = useGrocy();
+  // Grocy meal plan entries fill empty slots (sections without a name count as dinner).
+  const grocyMeal = (k: string, meal: MealType) =>
+    grocy.meals
+      ?.filter((g) => g.day === k && (g.section.includes(meal) || (!g.section && meal === 'dinner')))
+      .map((g) => g.name)
+      .join(', ') || '';
 
   const begin = (k: string, meal: MealType) => {
     setEditing(`${k}|${meal}`);
@@ -86,7 +94,15 @@ export function MealsView() {
                 />
               ) : (
                 <button key={id} className={`meal-cell ${value ? 'filled' : ''} ${m.key}`} onClick={() => begin(k, m.key)}>
-                  {value ?? <span className="plus">+</span>}
+                  {value ??
+                    (grocyMeal(k, m.key) ? (
+                      <span className="grocy-meal">
+                        {grocyMeal(k, m.key)}
+                        <span className="raw-tag">Grocy</span>
+                      </span>
+                    ) : (
+                      <span className="plus">+</span>
+                    ))}
                 </button>
               );
             })}

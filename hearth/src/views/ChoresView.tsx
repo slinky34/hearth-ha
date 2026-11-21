@@ -1,14 +1,22 @@
 import { addDays, format, isToday, startOfDay } from 'date-fns';
 import { Check, ChevronLeft, ChevronRight, Flame, Pencil, Star, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Modal } from '../components/Modal';
+import { api } from '../lib/api';
+import { useGrocy } from '../lib/grocy';
 import { useHa } from '../lib/ha';
 import { useKiosk } from '../lib/kiosk';
 import { useStore } from '../lib/store';
-import type { Chore, Completions, Member } from '../lib/types';
-import { WEEKDAYS_SHORT, dateKey, initials, tint, uid } from '../lib/util';
+import type { Chore, Completions, Member, Period, TodoItem } from '../lib/types';
+import { WEEKDAYS_SHORT, dateKey, dueOn, initials, pastel, uid } from '../lib/util';
 
-const dueOn = (c: Chore, d: Date) => c.days.length === 0 || c.days.includes(d.getDay());
+export const PERIODS: { id: Period; label: string; icon: string }[] = [
+  { id: 'morning', label: 'Morning', icon: '🌅' },
+  { id: 'afternoon', label: 'Afternoon', icon: '☀️' },
+  { id: 'evening', label: 'Evening', icon: '🌙' },
+  { id: 'anytime', label: 'Chores', icon: '🧹' },
+];
+const periodOf = (c: Chore): Period => c.period ?? 'anytime';
 
 function streakFor(member: Member, chores: Chore[], completions: Completions) {
   const mine = chores.filter((c) => c.memberId === member.id);
@@ -30,19 +38,230 @@ function pointsFor(member: Member, chores: Chore[], completions: Completions) {
   return Object.values(completions).reduce((sum, ids) => sum + ids.reduce((s, id) => s + (byId.get(id)?.points ?? 0), 0), 0);
 }
 
+/** Items from a person's linked HA to-do list (e.g. a TaskMate child list). */
+function useTodo(entity?: string) {
+  const [items, setItems] = useState<TodoItem[]>([]);
+  const load = useCallback(async () => {
+    if (!entity) return setItems([]);
+    try {
+      setItems(await api.todoItems(entity));
+    } catch {
+      setItems([]);
+    }
+  }, [entity]);
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, [load]);
+  const toggle = async (it: TodoItem) => {
+    const status = it.status === 'completed' ? 'needs_action' : 'completed';
+    setItems((p) => p.map((x) => (x.uid === it.uid ? { ...x, status } : x)));
+    await api.service('todo', 'update_item', { entity_id: entity, item: it.uid, status }).catch(() => undefined);
+    load();
+  };
+  return { items, toggle };
+}
+
+function Ring({ pct, color, children, dim, on, onClick, label }: {
+  pct: number; color: string; children: ReactNode; dim?: boolean; on?: boolean; onClick: () => void; label: string;
+}) {
+  const r = 26;
+  const c = 2 * Math.PI * r;
+  return (
+    <button className={`ring ${dim ? 'dim' : ''} ${on ? 'on' : ''}`} onClick={onClick} disabled={dim}>
+      <svg viewBox="0 0 64 64" width="60" height="60">
+        <circle cx="32" cy="32" r={r} fill="var(--ring-bg)" stroke="var(--ring-track)" strokeWidth="5" />
+        {pct > 0 && (
+          <circle cx="32" cy="32" r={r} fill="none" stroke={color} strokeWidth="5" strokeLinecap="round"
+            strokeDasharray={`${(pct / 100) * c} ${c}`} transform="rotate(-90 32 32)" />
+        )}
+      </svg>
+      <span className="ring-icon">{children}</span>
+      <span className="ring-label">{label}</span>
+    </button>
+  );
+}
+
+function MemberColumn({ m, day, onToggle, layout }: {
+  m: Member; day: Date; onToggle: (c: Chore, m: Member) => void; layout: 'cards' | 'compact';
+}) {
+  const { data } = useStore();
+  const { entities } = useHa();
+  const { chores, completions } = data;
+  const [filter, setFilter] = useState<Period | null>(null);
+  const todo = useTodo(m.todo);
+  const done = new Set(completions[dateKey(day)] ?? []);
+  const due = chores.filter((c) => c.memberId === m.id && dueOn(c, day));
+  const todoOpen = isToday(day) ? todo.items : [];
+  const total = due.length + todoOpen.length;
+  const n = due.filter((c) => done.has(c.id)).length + todoOpen.filter((i) => i.status === 'completed').length;
+  const streak = streakFor(m, chores, completions);
+  const listName = entities.find((e) => e.entity_id === m.todo)?.name ?? 'To-do';
+
+  const ChoreCard = ({ c }: { c: Chore }) => {
+    const isDone = done.has(c.id);
+    return (
+      <button
+        className={`${layout === 'cards' ? 'task-card' : 'chore'} ${isDone ? 'done' : ''}`}
+        style={isDone ? { background: pastel(m.color, layout === 'cards' ? 0.6 : 0.3) } : {}}
+        onClick={() => onToggle(c, m)}
+      >
+        <span className="task-emoji">{c.emoji || '✅'}</span>
+        <span className="task-title">{c.title}</span>
+        {layout === 'cards' && c.points > 0 && (
+          <span className="task-stars">
+            <Star size={13} fill="currentColor" /> {c.points}
+          </span>
+        )}
+        <span className="check" style={isDone ? { background: m.color, borderColor: m.color } : {}}>
+          {isDone && <Check size={18} strokeWidth={3} />}
+        </span>
+      </button>
+    );
+  };
+
+  return (
+    <section className={`task-col ${layout} ${total > 0 && n === total ? 'all-done' : ''}`} style={{ background: pastel(m.color, 0.16), ['--member' as string]: m.color }}>
+      <header className="task-head">
+        <span className="avatar lg" style={{ background: m.color }}>
+          {initials(m.name)}
+        </span>
+        <div className="grow">
+          <h2>{m.name}</h2>
+          <div className="task-stats">
+            <span className="stat-pill">
+              <Check size={13} strokeWidth={3} /> {n}/{total}
+            </span>
+            <span className="stat-pill star">
+              <Star size={13} fill="currentColor" /> {pointsFor(m, chores, completions)}
+            </span>
+            {streak > 1 && (
+              <span className="stat-pill flame">
+                <Flame size={13} fill="currentColor" /> {streak}
+              </span>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {layout === 'cards' && (
+        <div className="rings">
+          {PERIODS.map((p) => {
+            const list = due.filter((c) => periodOf(c) === p.id);
+            const k = list.filter((c) => done.has(c.id)).length;
+            return (
+              <Ring
+                key={p.id}
+                label={p.label}
+                pct={list.length ? (k / list.length) * 100 : 0}
+                color={m.color}
+                dim={!list.length}
+                on={filter === p.id}
+                onClick={() => setFilter(filter === p.id ? null : p.id)}
+              >
+                {p.icon}
+              </Ring>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="task-scroll">
+        {PERIODS.filter((p) => !filter || filter === p.id).map((p) => {
+          const list = due.filter((c) => periodOf(c) === p.id);
+          if (!list.length) return null;
+          return (
+            <div key={p.id} className="task-section">
+              {layout === 'cards' && <h3 className="task-section-title">{p.label}</h3>}
+              {list.map((c) => <ChoreCard key={c.id} c={c} />)}
+            </div>
+          );
+        })}
+        {!filter && todoOpen.length > 0 && (
+          <div className="task-section">
+            <h3 className="task-section-title small">{listName}</h3>
+            {todoOpen.map((it) => {
+              const isDone = it.status === 'completed';
+              return (
+                <button
+                  key={it.uid}
+                  className={`chore ${isDone ? 'done' : ''}`}
+                  style={isDone ? { background: pastel(m.color, 0.3) } : {}}
+                  onClick={() => todo.toggle(it)}
+                >
+                  <span className="task-emoji small">📝</span>
+                  <span className="task-title">{it.summary}</span>
+                  <span className="check" style={isDone ? { background: m.color, borderColor: m.color } : {}}>
+                    {isDone && <Check size={18} strokeWidth={3} />}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {total === 0 && <p className="muted center">Nothing today 🎈</p>}
+      </div>
+    </section>
+  );
+}
+
+function GrocyColumn() {
+  const { grocy, reload } = useGrocy();
+  const [busy, setBusy] = useState<number | null>(null);
+  if (!grocy.chores) return null;
+  const soon = addDays(startOfDay(new Date()), 1);
+  const due = grocy.chores.filter((c) => !c.due || c.due < soon);
+  return (
+    <section className="task-col compact grocy-col">
+      <header className="task-head">
+        <span className="avatar lg grocy-avatar">🏠</span>
+        <div className="grow">
+          <h2>Household</h2>
+          <span className="muted small">Grocy chores due</span>
+        </div>
+      </header>
+      <div className="task-scroll">
+        {due.map((c) => (
+          <button
+            key={c.id}
+            className={`chore ${busy === c.id ? 'done' : ''}`}
+            onClick={async () => {
+              setBusy(c.id);
+              await api.service('grocy', 'execute_chore', { chore_id: c.id }).catch(() => undefined);
+              setTimeout(() => {
+                setBusy(null);
+                reload();
+              }, 1200);
+            }}
+          >
+            <span className="task-emoji small">🧽</span>
+            <span className="task-title">
+              {c.name}
+              {c.due && c.due < startOfDay(new Date()) && <span className="overdue"> · overdue</span>}
+            </span>
+            <span className="check">{busy === c.id && <Check size={18} strokeWidth={3} />}</span>
+          </button>
+        ))}
+        {due.length === 0 && <p className="muted center">All caught up ✨</p>}
+      </div>
+    </section>
+  );
+}
+
 export function ChoresView() {
   const { data, set } = useStore();
   const { selected } = useHa();
   const { kiosk } = useKiosk();
-  const { members, chores, completions } = data;
+  const { members, chores, settings } = data;
   const [day, setDay] = useState(() => startOfDay(new Date()));
   const [editing, setEditing] = useState(false);
   const [party, setParty] = useState<Member | null>(null);
   const key = dateKey(day);
-  const done = new Set(completions[key] ?? []);
   const shown = members.filter((m) => selected.length === 0 || selected.includes(m.id));
 
   const toggle = (c: Chore, m: Member) => {
+    const done = new Set(data.completions[key] ?? []);
     const wasDone = done.has(c.id);
     set('completions', (prev) => {
       const list = new Set(prev[key] ?? []);
@@ -69,78 +288,37 @@ export function ChoresView() {
           <button className="icon-btn" onClick={() => setDay((d) => addDays(d, 1))} aria-label="Next day">
             <ChevronRight />
           </button>
-          <h1>{isToday(day) ? 'Today’s chores' : format(day, 'EEEE, MMM d')}</h1>
+          <h1>{isToday(day) ? 'Tasks' : format(day, 'EEEE, MMM d')}</h1>
           {!isToday(day) && (
             <button className="btn ghost" onClick={() => setDay(startOfDay(new Date()))}>
               Today
             </button>
           )}
         </div>
-        {!kiosk && (
-          <button className="btn" onClick={() => setEditing(true)}>
-            <Pencil size={18} /> Edit chores
-          </button>
-        )}
+        <div className="nav-group">
+          <div className="segmented">
+            {(['cards', 'compact'] as const).map((l) => (
+              <button key={l} className={settings.choreLayout === l ? 'on' : ''} onClick={() => set('settings', (p) => ({ ...p, choreLayout: l }))}>
+                {l === 'cards' ? 'Cards' : 'Compact'}
+              </button>
+            ))}
+          </div>
+          {!kiosk && (
+            <button className="btn" onClick={() => setEditing(true)}>
+              <Pencil size={18} /> Edit
+            </button>
+          )}
+        </div>
       </div>
 
       {members.length === 0 ? (
         <div className="empty">Add your family in Settings to start assigning chores.</div>
       ) : (
-        <div className="chore-board">
-          {shown.map((m) => {
-            const due = chores.filter((c) => c.memberId === m.id && dueOn(c, day));
-            const n = due.filter((c) => done.has(c.id)).length;
-            const streak = streakFor(m, chores, completions);
-            const allDone = due.length > 0 && n === due.length;
-            return (
-              <section key={m.id} className={`chore-col ${allDone ? 'all-done' : ''}`} style={{ ['--member' as string]: m.color }}>
-                <header>
-                  <span className="avatar lg" style={{ background: m.color }}>
-                    {initials(m.name)}
-                  </span>
-                  <div>
-                    <h2>{m.name}</h2>
-                    <div className="stats">
-                      <span title="Total stars">
-                        <Star size={15} fill="currentColor" /> {pointsFor(m, chores, completions)}
-                      </span>
-                      {streak > 0 && (
-                        <span title="Days in a row with every chore done">
-                          <Flame size={15} fill="currentColor" /> {streak}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <span className="progress-num">
-                    {n}/{due.length}
-                  </span>
-                </header>
-                <div className="progress">
-                  <div style={{ width: due.length ? `${(n / due.length) * 100}%` : 0, background: m.color }} />
-                </div>
-                <div className="chore-list">
-                  {due.map((c) => {
-                    const isDone = done.has(c.id);
-                    return (
-                      <button
-                        key={c.id}
-                        className={`chore ${isDone ? 'done' : ''}`}
-                        style={isDone ? { background: tint(m.color, 0.2) } : {}}
-                        onClick={() => toggle(c, m)}
-                      >
-                        <span className="chore-emoji">{c.emoji || '✅'}</span>
-                        <span className="chore-title">{c.title}</span>
-                        <span className="check" style={isDone ? { background: m.color, borderColor: m.color } : {}}>
-                          {isDone && <Check size={20} strokeWidth={3} />}
-                        </span>
-                      </button>
-                    );
-                  })}
-                  {due.length === 0 && <p className="muted center">Nothing today 🎈</p>}
-                </div>
-              </section>
-            );
-          })}
+        <div className={`task-board ${settings.choreLayout}`}>
+          {shown.map((m) => (
+            <MemberColumn key={m.id} m={m} day={day} onToggle={toggle} layout={settings.choreLayout} />
+          ))}
+          {isToday(day) && selected.length === 0 && <GrocyColumn />}
         </div>
       )}
 
@@ -178,7 +356,7 @@ function Celebrate({ member }: { member: Member }) {
 function ChoreEditor({ onClose }: { onClose: () => void }) {
   const { data, set } = useStore();
   const { members, chores } = data;
-  const blank = (): Chore => ({ id: '', title: '', emoji: '', memberId: members[0]?.id ?? '', days: [], points: 1 });
+  const blank = (): Chore => ({ id: '', title: '', emoji: '', memberId: members[0]?.id ?? '', days: [], points: 1, period: 'anytime' });
   const [form, setForm] = useState<Chore>(blank);
   const [err, setErr] = useState<string | null>(null);
 
@@ -214,6 +392,20 @@ function ChoreEditor({ onClose }: { onClose: () => void }) {
                   onClick={() => setForm({ ...form, memberId: m.id })}
                 >
                   {m.name}
+                </button>
+              ))}
+            </div>
+          </label>
+          <label>
+            When
+            <div className="chips">
+              {PERIODS.map((p) => (
+                <button
+                  key={p.id}
+                  className={`chip ${(form.period ?? 'anytime') === p.id ? 'on' : ''}`}
+                  onClick={() => setForm({ ...form, period: p.id })}
+                >
+                  {p.icon} {p.id === 'anytime' ? 'Anytime' : p.label}
                 </button>
               ))}
             </div>
@@ -256,6 +448,7 @@ function ChoreEditor({ onClose }: { onClose: () => void }) {
                     <span>{c.emoji}</span>
                     <span className="grow">{c.title}</span>
                     <span className="muted small">
+                      {PERIODS.find((p) => p.id === (c.period ?? 'anytime'))?.icon}{' '}
                       {c.days.length ? c.days.map((d) => WEEKDAYS_SHORT[d]).join(' ') : 'Daily'} · {c.points}★
                     </span>
                     <button className="icon-btn" onClick={() => setForm(c)} aria-label="Edit">

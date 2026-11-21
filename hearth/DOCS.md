@@ -6,7 +6,7 @@ Open Hearth from the sidebar, then go to **Settings**:
 2. **Lists**: choose which to-do lists to show (none selected shows all).
 3. **Display**: pick the weather entity, theme, screensaver delay, and so on.
 
-Photos: upload them from the Photos tab, or copy files into `/media/hearth`.
+**Photo folder** (Configuration tab): the folder Hearth shows photos from, including subfolders. It can be anywhere under `/media` or `/share`, for example `/media/Photos/Family`. The default is `/media/hearth`. Restart the add-on after changing it.
 
 Adding events works for calendars that support it in HA (Local Calendar, Google, CalDAV). Subscribed ICS feeds are read-only.
 

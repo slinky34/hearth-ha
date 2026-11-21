@@ -1,0 +1,6 @@
+configuration:
+  photo_directory:
+    name: Photo folder
+    description: >-
+      Folder Hearth shows photos from, including subfolders. Must be inside /media or /share,
+      for example /media/Photos/Family or /share/photos. Uploads from Hearth go here too.

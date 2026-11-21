@@ -14,12 +14,34 @@ const PORT = Number(process.env.PORT || 8099);
 const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
-const PHOTO_DIR = path.resolve(process.env.PHOTO_DIR || (IN_ADDON ? '/media/hearth' : path.join(DATA_DIR, 'photos')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.2.0';
+const VERSION = process.env.HEARTH_VERSION || '0.3.0';
+
+// Add-on options (set on the add-on's Configuration tab in Home Assistant).
+let options = {};
+try {
+  options = JSON.parse(fs.readFileSync(path.join(DATA_DIR, 'options.json'), 'utf8'));
+} catch {
+  /* not running as an add-on */
+}
+
+// Photos can live in any folder under HA's /media or /share (photo_directory option).
+function resolvePhotoDir() {
+  if (process.env.PHOTO_DIR) return path.resolve(process.env.PHOTO_DIR);
+  if (!IN_ADDON) return path.join(DATA_DIR, 'photos');
+  const wanted = path.resolve(String(options.photo_directory || '/media/hearth'));
+  if (['/media', '/share'].some((root) => wanted === root || wanted.startsWith(root + '/'))) return wanted;
+  console.warn(`[hearth] photo_directory "${wanted}" must be inside /media or /share; using /media/hearth`);
+  return '/media/hearth';
+}
+const PHOTO_DIR = resolvePhotoDir();
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
-fs.mkdirSync(PHOTO_DIR, { recursive: true });
+try {
+  fs.mkdirSync(PHOTO_DIR, { recursive: true });
+} catch (e) {
+  console.warn(`[hearth] can't create photo folder ${PHOTO_DIR}:`, e.message);
+}
 
 // ---------- Home Assistant connection ----------
 let haBase = null;
@@ -54,7 +76,8 @@ async function ha(method, apiPath, body) {
   return { status: res.status, data };
 }
 
-// Only these services can be called through Hearth.
+// Only these services can be called through Hearth. Locks, alarms, and covers
+// (garage doors) are deliberately left out so a wall tablet can't open the house.
 const SERVICES = new Set([
   'calendar.create_event',
   'todo.get_items',
@@ -63,9 +86,38 @@ const SERVICES = new Set([
   'todo.remove_item',
   'todo.remove_completed_items',
   'weather.get_forecasts',
+  'media_player.media_play_pause',
+  'media_player.media_play',
+  'media_player.media_pause',
+  'media_player.media_next_track',
+  'media_player.media_previous_track',
+  'media_player.volume_set',
+  'media_player.volume_mute',
+  'media_player.shuffle_set',
+  'music_assistant.get_library',
+  'music_assistant.play_media',
+  'light.toggle',
+  'switch.toggle',
+  'fan.toggle',
+  'input_boolean.toggle',
+  'scene.turn_on',
+  'script.turn_on',
+  'grocy.add_generic',
+  'grocy.update_generic',
+  'grocy.execute_chore',
 ]);
+// Extra checks for services that could otherwise touch more than intended.
+const SERVICE_GUARDS = {
+  'grocy.add_generic': (b) => b.entity_type === 'shopping_list',
+  'grocy.update_generic': (b) => b.entity_type === 'shopping_list',
+};
 const ENTITY_RE = /^[a-z0-9_]+\.[a-z0-9_]+$/;
-const ENTITY_DOMAINS = ['calendar', 'todo', 'weather'];
+// Domains Hearth may read and list.
+const ENTITY_DOMAINS = [
+  'calendar', 'todo', 'weather', 'media_player', 'light', 'switch', 'fan', 'input_boolean',
+  'scene', 'script', 'sensor', 'binary_sensor', 'climate',
+];
+const haOrigin = () => (haBase ? haBase.replace(/\/api$/, '') : null);
 
 // ---------- JSON store ----------
 const STORE_KEYS = new Set(['members', 'chores', 'completions', 'meals', 'settings']);
@@ -147,6 +199,32 @@ function safePhotoName(name) {
   return PHOTO_RE.test(base) && !base.startsWith('.') ? base : null;
 }
 
+/** Resolves a photo path relative to PHOTO_DIR (subfolders allowed), refusing anything outside it. */
+function photoPath(rel) {
+  const r = String(rel || '');
+  if (!PHOTO_RE.test(r) || r.split('/').some((seg) => !seg || seg.startsWith('.'))) return null;
+  const full = path.resolve(PHOTO_DIR, r);
+  return full.startsWith(PHOTO_DIR + path.sep) ? full : null;
+}
+
+/** Lists photos in PHOTO_DIR and its subfolders (a few levels deep), as relative paths. */
+async function listPhotos(dir = PHOTO_DIR, prefix = '', depth = 0, out = []) {
+  let entries = [];
+  try {
+    entries = await fsp.readdir(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries) {
+    if (e.name.startsWith('.') || e.name.startsWith('@')) continue; // skip hidden / NAS metadata folders
+    const rel = prefix ? `${prefix}/${e.name}` : e.name;
+    if (e.isDirectory() && depth < 4) await listPhotos(path.join(dir, e.name), rel, depth + 1, out);
+    else if (e.isFile() && PHOTO_RE.test(e.name)) out.push(rel);
+    if (out.length >= 5000) break;
+  }
+  return out;
+}
+
 async function streamFile(res, file, cache) {
   const st = await fsp.stat(file);
   res.writeHead(200, {
@@ -168,7 +246,7 @@ async function route(req, res) {
   }
   const m = req.method;
 
-  if (p === '/api/status') return send(res, 200, { mode, version: VERSION });
+  if (p === '/api/status') return send(res, 200, { mode, version: VERSION, photoDir: PHOTO_DIR });
 
   // --- Home Assistant proxy ---
   if (p === '/api/ha/calendars' && m === 'GET') {
@@ -200,11 +278,45 @@ async function route(req, res) {
       .map((s) => ({ entity_id: s.entity_id, name: s.attributes?.friendly_name || s.entity_id }));
     return send(res, 200, list);
   }
+  // Full states for several domains at once, e.g. ?domains=media_player,light
+  if (p === '/api/ha/states' && m === 'GET') {
+    const want = (url.searchParams.get('domains') || '').split(',').filter((d) => ENTITY_DOMAINS.includes(d));
+    const ids = (url.searchParams.get('ids') || '').split(',').filter((id) => ENTITY_RE.test(id));
+    const r = await ha('GET', '/states');
+    if (r.status !== 200 || !Array.isArray(r.data)) return send(res, r.status, r.data);
+    const list = r.data.filter(
+      (s) => ENTITY_DOMAINS.includes(s.entity_id.split('.')[0]) && (want.includes(s.entity_id.split('.')[0]) || ids.includes(s.entity_id)),
+    );
+    return send(res, 200, list);
+  }
+  // Album art for a media player (HA serves it behind auth, so proxy it).
+  match = p.match(/^\/api\/ha\/media_image\/(media_player\.[a-z0-9_]+)$/);
+  if (match && m === 'GET') {
+    if (mock) return send(res, 200, mock.albumArt(match[1]), { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'max-age=60' });
+    const st = await ha('GET', `/states/${match[1]}`);
+    const pic = st.data?.attributes?.entity_picture;
+    if (!pic) return send(res, 404, 'No artwork');
+    if (/^https?:\/\//.test(pic)) {
+      res.writeHead(302, { Location: pic, 'Cache-Control': 'no-store' });
+      return res.end();
+    }
+    const img = await fetch(haOrigin() + pic, { headers: { Authorization: `Bearer ${haToken}` }, signal: AbortSignal.timeout(15000) });
+    if (!img.ok) return send(res, img.status, 'Artwork unavailable');
+    const buf = Buffer.from(await img.arrayBuffer());
+    return send(res, 200, buf, { 'Content-Type': img.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'max-age=300' });
+  }
+  // Music Assistant's config entry id (needed for music_assistant.get_library).
+  if (p === '/api/ha/music_assistant' && m === 'GET') {
+    const r = await ha('GET', '/config/config_entries/entry?domain=music_assistant');
+    const entry = Array.isArray(r.data) ? r.data.find((e) => e.state === 'loaded') ?? r.data[0] : null;
+    return send(res, 200, { entry_id: entry?.entry_id ?? null });
+  }
   match = p.match(/^\/api\/ha\/services\/([a-z_]+)\/([a-z_]+)$/);
   if (match && m === 'POST') {
     const svc = `${match[1]}.${match[2]}`;
     if (!SERVICES.has(svc)) return send(res, 403, { error: `Service ${svc} not allowed` });
     const body = await readJson(req);
+    if (SERVICE_GUARDS[svc] && !SERVICE_GUARDS[svc](body)) return send(res, 403, { error: `That use of ${svc} isn't allowed` });
     const qs = url.searchParams.has('return_response') ? '?return_response' : '';
     const r = await ha('POST', `/services/${match[1]}/${match[2]}${qs}`, body);
     return send(res, r.status, r.data);
@@ -224,7 +336,7 @@ async function route(req, res) {
 
   // --- photos ---
   if (p === '/api/photos' && m === 'GET') {
-    const files = (await fsp.readdir(PHOTO_DIR)).filter((f) => safePhotoName(f)).sort();
+    const files = (await listPhotos()).sort();
     return send(res, 200, files);
   }
   if (p === '/api/photos' && m === 'POST') {
@@ -237,17 +349,17 @@ async function route(req, res) {
   }
   match = p.match(/^\/api\/photos\/(.+)$/);
   if (match && m === 'DELETE') {
-    const name = safePhotoName(match[1]);
-    if (!name) return send(res, 400, { error: 'Bad name' });
-    await fsp.rm(path.join(PHOTO_DIR, name), { force: true });
+    const file = photoPath(match[1]);
+    if (!file) return send(res, 400, { error: 'Bad name' });
+    await fsp.rm(file, { force: true });
     return send(res, 200, { ok: true });
   }
   match = p.match(/^\/photos\/(.+)$/);
   if (match && m === 'GET') {
-    const name = safePhotoName(match[1]);
-    if (!name) return send(res, 404, 'Not found');
+    const file = photoPath(match[1]);
+    if (!file) return send(res, 404, 'Not found');
     try {
-      return await streamFile(res, path.join(PHOTO_DIR, name), 'public, max-age=86400');
+      return await streamFile(res, file, 'public, max-age=86400');
     } catch {
       return send(res, 404, 'Not found');
     }

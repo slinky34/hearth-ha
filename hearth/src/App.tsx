@@ -1,5 +1,5 @@
 import {
-  CalendarDays, Image, LayoutGrid, ListChecks, Lock, Maximize, Settings as Gear, Sparkles, UtensilsCrossed,
+  CalendarDays, House, Image, LayoutGrid, ListChecks, Lock, Maximize, Music, Settings as Gear, Sparkles, UtensilsCrossed,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Modal } from './components/Modal';
@@ -7,12 +7,15 @@ import { TopBar } from './components/TopBar';
 import { HaProvider } from './lib/ha';
 import { useIdle } from './lib/hooks';
 import { KioskProvider, enterFullscreen, useKiosk } from './lib/kiosk';
+import { MusicProvider } from './lib/music';
 import { StoreProvider, useStore } from './lib/store';
 import { WeatherProvider } from './lib/weather';
 import { CalendarView } from './views/CalendarView';
 import { ChoresView } from './views/ChoresView';
+import { HomeView } from './views/HomeView';
 import { ListsView } from './views/ListsView';
 import { MealsView } from './views/MealsView';
+import { MusicView } from './views/MusicView';
 import { PhotosView } from './views/PhotosView';
 import { Screensaver } from './views/Screensaver';
 import { SettingsView } from './views/SettingsView';
@@ -21,10 +24,12 @@ import { TodayView } from './views/TodayView';
 const TABS = [
   { id: 'today', label: 'Today', Icon: LayoutGrid },
   { id: 'calendar', label: 'Calendar', Icon: CalendarDays },
-  { id: 'chores', label: 'Chores', Icon: Sparkles },
+  { id: 'chores', label: 'Tasks', Icon: Sparkles },
   { id: 'lists', label: 'Lists', Icon: ListChecks },
   { id: 'meals', label: 'Meals', Icon: UtensilsCrossed },
   { id: 'photos', label: 'Photos', Icon: Image },
+  { id: 'music', label: 'Music', Icon: Music },
+  { id: 'home', label: 'Home', Icon: House },
 ] as const;
 type Tab = (typeof TABS)[number]['id'] | 'settings';
 const ALL_TABS: string[] = [...TABS.map((t) => t.id), 'settings'];
@@ -170,7 +175,7 @@ function Shell() {
         )}
       </nav>
       <main>
-        <TopBar />
+        <TopBar onMusic={() => setTab('music')} />
         {saveError && <div className="banner">Couldn’t save changes: {saveError}</div>}
         <div className="view">
           {tab === 'today' && <TodayView />}
@@ -179,6 +184,8 @@ function Shell() {
           {tab === 'lists' && <ListsView />}
           {tab === 'meals' && <MealsView />}
           {tab === 'photos' && <PhotosView onSlideshow={() => setIdle(true)} />}
+          {tab === 'music' && <MusicView />}
+          {tab === 'home' && <HomeView />}
           {tab === 'settings' && !kiosk && <SettingsView />}
         </div>
       </main>
@@ -194,7 +201,9 @@ export default function App() {
       <StoreProvider>
         <HaProvider>
           <WeatherProvider>
-            <Shell />
+            <MusicProvider>
+              <Shell />
+            </MusicProvider>
           </WeatherProvider>
         </HaProvider>
       </StoreProvider>

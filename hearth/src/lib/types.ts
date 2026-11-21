@@ -4,7 +4,11 @@ export interface Member {
   color: string;
   /** Calendar entity ids whose events belong to this person. */
   calendars: string[];
+  /** Optional HA to-do list with this person's chores (e.g. a TaskMate child list). */
+  todo?: string;
 }
+
+export type Period = 'morning' | 'afternoon' | 'evening' | 'anytime';
 
 export interface Chore {
   id: string;
@@ -14,6 +18,8 @@ export interface Chore {
   /** Weekdays (0 = Sunday) the chore is due. Empty = every day. */
   days: number[];
   points: number;
+  /** Time of day for routine grouping; missing = anytime chore. */
+  period?: Period;
 }
 
 /** dateKey (yyyy-MM-dd) -> ids of chores completed that day */
@@ -37,7 +43,26 @@ export interface Settings {
   dayStartHour: number;
   /** Optional PIN required to leave kiosk mode (child lock, not real security). */
   kioskPin: string;
+  /** media_player entities shown in Music; empty = all */
+  musicPlayers: string[];
+  /** Entities shown on the Home screen (lights, switches, scenes, sensors...) */
+  controls: string[];
+  calendarView: CalendarViewMode;
+  /** Grid view: 5 = rolling five days from today, 7 = the whole week. */
+  gridDays: 5 | 7;
+  familyName: string;
+  countdowns: Countdown[];
+  choreLayout: 'cards' | 'compact';
 }
+
+export interface Countdown {
+  id: string;
+  title: string;
+  emoji: string;
+  date: string; // yyyy-MM-dd
+}
+
+export type CalendarViewMode = 'day' | 'week' | 'schedule' | 'grid' | 'month';
 
 export interface StoreData {
   members: Member[];
@@ -75,3 +100,10 @@ export interface TodoItem {
 }
 
 export type Mode = 'demo' | 'addon' | 'remote';
+
+export interface HaState {
+  entity_id: string;
+  state: string;
+  last_updated?: string;
+  attributes: Record<string, any>;
+}

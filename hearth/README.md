@@ -2,14 +2,30 @@
 
 A self-hosted, Skylight-style family wall display that runs as a Home Assistant add-on. Put any tablet on the wall and get:
 
-- **Today**: the home screen, with today's events as cards and everyone's chores in a Tasks column, plus a + button for quick events.
-- **Calendar**: day, week, and month views of your Home Assistant calendars, color-coded per family member, with weather in the week header and tonight's dinner under each day. Add events from the screen.
-- **Chores**: a per-person chore chart with stars, streaks, and a celebration when someone finishes everything.
-- **Lists**: your HA to-do lists (Shopping List, Local To-do, Todoist, and others): add, check off, clear.
-- **Meals**: a weekly breakfast, lunch, and dinner planner.
-- **Photos and screensaver**: upload photos from your phone. After a set idle time the screen turns into a photo frame with the clock, weather, and what's next today.
+- **Today**: the home screen. With *Everyone* selected it splits into a column per person (their events and tasks) plus a Family column for shared calendars.
+- **Calendar**: five views you can switch between or set as the default: Day, Week (columns), Schedule (day cards), Grid (hour grid, 5 days or the full week), and Month. Shared events get striped colors and avatar badges. Above the calendar are countdown chips ("🌴 Vacation 48 days") and each person's chore progress.
+- **Tasks**: Skylight-style per-person columns with Morning / Afternoon / Evening / Chores progress rings, big emoji task cards, stars, and streaks. There's also a Compact layout. Each person can be linked to an HA to-do list, such as a TaskMate child list.
+- **Lists**: HA to-do lists (Shopping List, Local To-do, AnyList, Todoist, and others), plus a Grocy shopping list and expiring products. Raw data that other apps write into lists is shown as a short label.
+- **Meals**: a weekly planner. The Grocy meal plan fills empty slots.
+- **Music**: the now-playing pill in the header, full controls (play/pause, skip, volume) for any HA media player, and Music Assistant playlists.
+- **Home**: tap tiles for lights, switches, fans, scenes, and scripts, plus sensor readouts. Locks, alarms, and garage doors are intentionally excluded.
+- **Photos and screensaver**: photos from any folder under `/media` or `/share`, including subfolders. The screensaver shows the clock, weather, what's next, and what's playing.
 
-Family members, chores, meals, and settings are stored in the add-on's `/data` folder. Photos are stored in `/media/hearth`. Nothing leaves your network.
+### Integrations
+
+All integrations go through Home Assistant, so there are no extra logins in Hearth:
+
+| Integration | What Hearth uses |
+|---|---|
+| Any HA calendar (Google, iCloud/CalDAV, Local Calendar, Outlook…) | events, adding events |
+| HA to-do lists (Shopping List, Local To-do, AnyList, Todoist…) | Lists screen |
+| TaskMate | link a child's to-do list to a person on the Tasks screen |
+| Grocy (custom-components/grocy) | shopping list, chores, expiring products, meal plan |
+| Media players / Music Assistant | now playing, controls, playlists |
+| Weather | current conditions and forecast |
+| Lights, switches, fans, scenes, scripts, sensors | Home screen |
+
+Family members, chores, meals, and settings are stored in the add-on's `/data` folder. Photos come from `/media/hearth` by default. Change it with the add-on's **Photo folder** option. Nothing leaves your network.
 
 ## Install in Home Assistant
 

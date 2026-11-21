@@ -6,8 +6,9 @@ import { useStore } from '../lib/store';
 import { initials } from '../lib/util';
 import { useWeather, weatherIcon, weatherLabel } from '../lib/weather';
 import { Modal } from './Modal';
+import { NowPlayingPill } from './NowPlaying';
 
-export function TopBar() {
+export function TopBar({ onMusic }: { onMusic: () => void }) {
   const { data } = useStore();
   const { selected, setSelected } = useHa();
   const weather = useWeather();
@@ -21,12 +22,14 @@ export function TopBar() {
   return (
     <header className="topbar">
       <div className="clock">
+        {data.settings.familyName && <span className="family-name">{data.settings.familyName}</span>}
         <span className="time">{format(now, clock24 ? 'HH:mm' : 'h:mm')}</span>
         {!clock24 && <span className="ampm">{format(now, 'a')}</span>}
         <span className="date">{format(now, 'EEEE, MMMM d')}</span>
       </div>
 
       <div className="topbar-right">
+        <NowPlayingPill onOpen={onMusic} />
         {data.members.length > 0 && (
           <div className="member-filter" aria-label="Filter by family member">
             <button className={`chip ${selected.length === 0 ? 'on' : ''}`} onClick={() => setSelected([])}>

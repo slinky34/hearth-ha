@@ -43,3 +43,14 @@ export function pastel(hex: string, amount = 0.32) {
   const mix = (c: number) => Math.round(c * amount + 255 * (1 - amount));
   return `rgb(${mix((n >> 16) & 255)}, ${mix((n >> 8) & 255)}, ${mix(n & 255)})`;
 }
+
+import type { Chore as _Chore } from './types';
+/** Whether a chore is due on a given day. */
+export const dueOn = (c: _Chore, d: Date) => c.days.length === 0 || c.days.includes(d.getDay());
+
+/** Diagonal stripes in several people's colors, for shared events. */
+export function stripes(colors: string[], amount = 0.42) {
+  const w = 22;
+  const stops = colors.map((c, i) => `${pastel(c, amount)} ${i * w}px ${(i + 1) * w}px`).join(', ');
+  return `repeating-linear-gradient(120deg, ${stops})`;
+}

@@ -1,6 +1,9 @@
 import { Lock, Plus, Trash2 } from 'lucide-react';
 import { useHa } from '../lib/ha';
+import { useEffect, useState } from 'react';
+import { api } from '../lib/api';
 import { useKiosk } from '../lib/kiosk';
+import { CONTROL_DOMAINS } from './HomeView';
 import { useStore } from '../lib/store';
 import type { Member, Settings } from '../lib/types';
 import { PALETTE, initials, uid } from '../lib/util';
@@ -15,6 +18,13 @@ export function SettingsView() {
     set('members', (prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   const todos = entities.filter((e) => e.entity_id.startsWith('todo.'));
   const weathers = entities.filter((e) => e.entity_id.startsWith('weather.'));
+  const players = entities.filter((e) => e.entity_id.startsWith('media_player.'));
+  const controllable = entities.filter((e) => CONTROL_DOMAINS.includes(e.entity_id.split('.')[0]));
+  const [q, setQ] = useState('');
+  const [photoDir, setPhotoDir] = useState('');
+  useEffect(() => {
+    api.status().then((st) => setPhotoDir(st.photoDir)).catch(() => undefined);
+  }, []);
 
   return (
     <div className="settings">
@@ -65,6 +75,17 @@ export function SettingsView() {
                   );
                 })}
               </div>
+              <label className="inline-select">
+                <span className="muted small">Chore list from Home Assistant (TaskMate or any to-do list)</span>
+                <select value={m.todo ?? ''} onChange={(e) => updateMember(m.id, { todo: e.target.value || undefined })}>
+                  <option value="">None</option>
+                  {todos.map((t) => (
+                    <option key={t.entity_id} value={t.entity_id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
             <button
               className="icon-btn"
@@ -219,6 +240,99 @@ export function SettingsView() {
             </select>
           </label>
         </div>
+      </section>
+
+      <section className="card">
+        <h2>Calendar</h2>
+        <div className="settings-grid">
+          <label>
+            Family name (shown in the header)
+            <input value={settings.familyName} placeholder="e.g. Miller Family" onChange={(e) => s('familyName', e.target.value)} />
+          </label>
+          <label>
+            Default calendar view
+            <select value={settings.calendarView} onChange={(e) => s('calendarView', e.target.value as Settings['calendarView'])}>
+              <option value="day">Day</option>
+              <option value="week">Week (columns)</option>
+              <option value="schedule">Schedule (day cards)</option>
+              <option value="grid">Grid (hours)</option>
+              <option value="month">Month</option>
+            </select>
+          </label>
+          <label>
+            Grid view shows
+            <select value={settings.gridDays} onChange={(e) => s('gridDays', Number(e.target.value) as 5 | 7)}>
+              <option value={5}>Next 5 days</option>
+              <option value={7}>Whole week</option>
+            </select>
+          </label>
+        </div>
+        <h3 className="sub">Countdowns</h3>
+        <p className="muted small">Shown as chips above the calendar, like “🌴 Vacation 48 days”.</p>
+        {settings.countdowns.map((c) => (
+          <div key={c.id} className="row countdown-row">
+            <input className="emoji-input" value={c.emoji} onChange={(e) => s('countdowns', settings.countdowns.map((x) => (x.id === c.id ? { ...x, emoji: e.target.value } : x)))} />
+            <input value={c.title} onChange={(e) => s('countdowns', settings.countdowns.map((x) => (x.id === c.id ? { ...x, title: e.target.value } : x)))} />
+            <input type="date" value={c.date} onChange={(e) => s('countdowns', settings.countdowns.map((x) => (x.id === c.id ? { ...x, date: e.target.value } : x)))} style={{ maxWidth: 180 }} />
+            <button className="icon-btn" aria-label="Remove countdown" onClick={() => s('countdowns', settings.countdowns.filter((x) => x.id !== c.id))}>
+              <Trash2 size={18} />
+            </button>
+          </div>
+        ))}
+        <div>
+          <button className="btn" onClick={() => s('countdowns', [...settings.countdowns, { id: uid(), title: 'Something fun', emoji: '🎉', date: new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10) }])}>
+            <Plus size={18} /> Add countdown
+          </button>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>Music</h2>
+        <p className="muted small">Speakers to show. None selected shows every media player (Sonos, Music Assistant, Cast, Spotify…).</p>
+        <div className="chips">
+          {players.map((p) => {
+            const on = settings.musicPlayers.includes(p.entity_id);
+            return (
+              <button key={p.entity_id} className={`chip ${on ? 'on' : ''}`} onClick={() => s('musicPlayers', on ? settings.musicPlayers.filter((x) => x !== p.entity_id) : [...settings.musicPlayers, p.entity_id])}>
+                {p.name}
+              </button>
+            );
+          })}
+          {players.length === 0 && <span className="muted">No media players found.</span>}
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>Home controls</h2>
+        <p className="muted small">
+          Lights, switches, fans, scenes, scripts, and sensors for the Home screen. Locks, alarms, and garage doors are
+          intentionally not controllable from a wall display.
+        </p>
+        <input placeholder="Search entities…" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 320 }} />
+        <div className="chips">
+          {controllable
+            .filter((e) => settings.controls.includes(e.entity_id) || (q && `${e.name} ${e.entity_id}`.toLowerCase().includes(q.toLowerCase())))
+            .slice(0, 60)
+            .map((e) => {
+              const on = settings.controls.includes(e.entity_id);
+              return (
+                <button key={e.entity_id} className={`chip small ${on ? 'on' : ''}`} onClick={() => s('controls', on ? settings.controls.filter((x) => x !== e.entity_id) : [...settings.controls, e.entity_id])}>
+                  {on ? '✓ ' : '+ '}
+                  {e.name}
+                </button>
+              );
+            })}
+          {!q && settings.controls.length === 0 && <span className="muted small">Search above to add entities.</span>}
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>Photos</h2>
+        <p className="muted small">
+          Showing photos from <code>{photoDir || '…'}</code> and its subfolders. To use a different Home Assistant folder,
+          change <b>Photo folder</b> on the Hearth add-on’s <b>Configuration</b> tab (anything under <code>/media</code> or{' '}
+          <code>/share</code>, e.g. <code>/media/Photos/Family</code>), then restart the add-on.
+        </p>
       </section>
 
       <section className="card">

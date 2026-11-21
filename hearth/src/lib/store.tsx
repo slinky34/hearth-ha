@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { api } from './api';
-import { demoData } from './demo';
+import { demoData, demoSettings } from './demo';
 import type { Mode, Settings, StoreData } from './types';
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -15,6 +15,13 @@ export const DEFAULT_SETTINGS: Settings = {
   hiddenCalendars: [],
   dayStartHour: 7,
   kioskPin: '',
+  musicPlayers: [],
+  controls: [],
+  calendarView: 'week',
+  gridDays: 5,
+  familyName: '',
+  countdowns: [],
+  choreLayout: 'cards',
 };
 
 function normalize(raw: Partial<StoreData>): StoreData {
@@ -71,11 +78,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setMode(status.mode);
         revRef.current = s.rev;
         const empty = s.rev === 0 && !s.data.members;
-        dataRef.current = normalize(empty && status.mode === 'demo' ? demoData() : s.data);
+        dataRef.current = normalize(empty && status.mode === 'demo' ? { ...demoData(), settings: { ...DEFAULT_SETTINGS, ...demoSettings() } } : s.data);
         setData(dataRef.current);
         if (empty && status.mode === 'demo') {
           const seeded = dataRef.current;
-          (['members', 'chores', 'completions', 'meals'] as const).forEach((k) => set(k, seeded[k]));
+          (['members', 'chores', 'completions', 'meals', 'settings'] as const).forEach((k) => set(k, seeded[k]));
         }
       } catch (e) {
         if (alive) setLoadError(String((e as Error).message || e));

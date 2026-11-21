@@ -1,13 +1,35 @@
+import { format, parseISO } from 'date-fns';
 import { Check, ChevronDown, Plus, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { useGrocy } from '../lib/grocy';
 import { useHa } from '../lib/ha';
 import { useStore } from '../lib/store';
 import type { TodoItem } from '../lib/types';
 
+/**
+ * Some apps (e.g. Mealie's device sync) write raw JSON into HA to-do lists.
+ * Show those as a short readable label instead of a wall of text.
+ */
+export function readableItem(summary: string): { text: string; raw: boolean } {
+  const i = summary.indexOf('{');
+  if (i < 0 || !summary.trim().endsWith('}')) return { text: summary, raw: false };
+  const prefix = summary.slice(0, i).replace(/[:\s]+$/, '').trim();
+  let label = '';
+  try {
+    const obj = JSON.parse(summary.slice(i));
+    label = obj.name ?? obj.title ?? obj.summary ?? obj.label ?? '';
+  } catch {
+    /* not valid JSON; fall through */
+  }
+  const text = [prefix, label].filter(Boolean).join(' · ') || 'Data item';
+  return { text, raw: true };
+}
+
 export function ListsView() {
   const { settings } = useStore().data;
   const { entities, error } = useHa();
+  const { grocy, reload: reloadGrocy } = useGrocy();
   const todos = entities.filter((e) => e.entity_id.startsWith('todo.'));
   const shown = settings.lists.length ? todos.filter((t) => settings.lists.includes(t.entity_id)) : todos;
 
@@ -17,17 +39,47 @@ export function ListsView() {
         <h1>Lists</h1>
       </div>
       {error && <div className="banner">Home Assistant: {error}</div>}
-      {shown.length === 0 && !error && (
+      {shown.length === 0 && !grocy.shopping && !error && (
         <div className="empty">
-          No to-do lists found. Add a Shopping List or Local To-do integration in Home Assistant, then pick lists in Settings.
+          No lists found. Add Shopping List, Local To-do, AnyList, Todoist, or Grocy in Home Assistant, then pick lists in Settings.
         </div>
       )}
       <div className="list-grid">
+        {grocy.shopping && <GrocyShopping items={grocy.shopping} reload={reloadGrocy} />}
         {shown.map((t) => (
           <TodoCard key={t.entity_id} entity={t.entity_id} name={t.name} />
         ))}
+        {grocy.expiring && grocy.expiring.length > 0 && (
+          <section className="card todo">
+            <header>
+              <h2>Expiring soon</h2>
+              <span className="muted small">Grocy</span>
+            </header>
+            <div className="todo-items">
+              {grocy.expiring.map((p) => (
+                <div key={p.id} className="todo-item static">
+                  <span className="expiry">{p.date ? format(parseISO(p.date), 'MMM d') : '—'}</span>
+                  <span className="item-text">
+                    {p.name}
+                    {p.amount > 1 && <span className="muted"> × {p.amount}</span>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
+  );
+}
+
+function ItemText({ summary }: { summary: string }) {
+  const r = readableItem(summary);
+  return (
+    <span className="item-text" title={r.raw ? summary : undefined}>
+      {r.text}
+      {r.raw && <span className="raw-tag">data</span>}
+    </span>
   );
 }
 
@@ -105,7 +157,7 @@ function TodoCard({ entity, name }: { entity: string; name: string }) {
         {open.map((it) => (
           <button key={it.uid} className="todo-item" onClick={() => toggle(it)}>
             <span className="check" />
-            {it.summary}
+            <ItemText summary={it.summary} />
           </button>
         ))}
         {open.length === 0 && !loading && <p className="muted center">All clear ✨</p>}
@@ -122,7 +174,7 @@ function TodoCard({ entity, name }: { entity: string; name: string }) {
                   <span className="check on">
                     <Check size={16} strokeWidth={3} />
                   </span>
-                  {it.summary}
+                  <ItemText summary={it.summary} />
                 </button>
               ))}
               <button className="btn ghost small" onClick={() => run(() => api.service('todo', 'remove_completed_items', { entity_id: entity }))}>
@@ -132,6 +184,55 @@ function TodoCard({ entity, name }: { entity: string; name: string }) {
           )}
         </div>
       )}
+    </section>
+  );
+}
+
+function GrocyShopping({ items, reload }: { items: { id: number; name: string; amount: number; done: boolean }[]; reload: () => void }) {
+  const [text, setText] = useState('');
+  const [local, setLocal] = useState(items);
+  useEffect(() => setLocal(items), [items]);
+  const later = () => setTimeout(reload, 1500); // the Grocy sensor refreshes on its own schedule
+
+  const add = async () => {
+    const note = text.trim();
+    if (!note) return;
+    setText('');
+    setLocal((p) => [...p, { id: -Date.now(), name: note, amount: 1, done: false }]);
+    await api.service('grocy', 'add_generic', { entity_type: 'shopping_list', data: { note, amount: 1, shopping_list_id: 1 } }).catch(() => undefined);
+    later();
+  };
+  const toggle = async (id: number, done: boolean) => {
+    setLocal((p) => p.map((x) => (x.id === id ? { ...x, done: !done } : x)));
+    await api.service('grocy', 'update_generic', { entity_type: 'shopping_list', object_id: id, data: { done: done ? 0 : 1 } }).catch(() => undefined);
+    later();
+  };
+  const open = local.filter((i) => !i.done);
+  const done = local.filter((i) => i.done);
+  return (
+    <section className="card todo">
+      <header>
+        <h2>Grocy shopping</h2>
+        <span className="muted">{open.length}</span>
+      </header>
+      <form className="add-row" onSubmit={(e) => { e.preventDefault(); add(); }}>
+        <input placeholder="Add an item" value={text} onChange={(e) => setText(e.target.value)} />
+        <button className="icon-btn filled" type="submit" aria-label="Add">
+          <Plus />
+        </button>
+      </form>
+      <div className="todo-items">
+        {[...open, ...done].map((it) => (
+          <button key={it.id} className={`todo-item ${it.done ? 'done' : ''}`} onClick={() => toggle(it.id, it.done)}>
+            <span className={`check ${it.done ? 'on' : ''}`}>{it.done && <Check size={16} strokeWidth={3} />}</span>
+            <span className="item-text">
+              {it.name}
+              {it.amount > 1 && <span className="muted"> × {it.amount}</span>}
+            </span>
+          </button>
+        ))}
+        {local.length === 0 && <p className="muted center">All clear ✨</p>}
+      </div>
     </section>
   );
 }

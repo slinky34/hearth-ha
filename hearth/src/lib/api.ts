@@ -1,5 +1,5 @@
 import { parseISO } from 'date-fns';
-import type { CalEvent, CalendarInfo, EntityInfo, Mode, StoreData, TodoItem } from './types';
+import type { CalEvent, CalendarInfo, EntityInfo, HaState, Mode, StoreData, TodoItem } from './types';
 
 // All URLs are relative so the app works under Home Assistant ingress paths.
 async function j<T>(url: string, init?: RequestInit): Promise<T> {
@@ -43,7 +43,11 @@ function toEvent(e: HaEvent, calendar: string): CalEvent {
 }
 
 export const api = {
-  status: () => j<{ mode: Mode; version: string }>('api/status'),
+  status: () => j<{ mode: Mode; version: string; photoDir: string }>('api/status'),
+  states: (opts: { domains?: string[]; ids?: string[] }) =>
+    j<HaState[]>(`api/ha/states?${new URLSearchParams({ domains: (opts.domains ?? []).join(','), ids: (opts.ids ?? []).join(',') })}`),
+  mediaImageUrl: (entity: string, key: string) => `api/ha/media_image/${entity}?v=${encodeURIComponent(key)}`,
+  musicAssistantEntry: () => j<{ entry_id: string | null }>('api/ha/music_assistant'),
 
   calendars: () => j<CalendarInfo[]>('api/ha/calendars'),
   entities: () => j<EntityInfo[]>('api/ha/entities'),
@@ -71,8 +75,8 @@ export const api = {
     j<{ rev: number }>(`api/store/${key}`, { ...post({ value }), method: 'PUT' }),
 
   photos: () => j<string[]>('api/photos'),
-  photoUrl: (name: string) => `photos/${encodeURIComponent(name)}`,
+  photoUrl: (name: string) => `photos/${name.split('/').map(encodeURIComponent).join('/')}`,
   uploadPhoto: (file: File) =>
     j<{ name: string }>(`api/photos?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file }),
-  deletePhoto: (name: string) => j(`api/photos/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+  deletePhoto: (name: string) => j(`api/photos/${name.split('/').map(encodeURIComponent).join('/')}`, { method: 'DELETE' }),
 };
