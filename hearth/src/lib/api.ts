@@ -70,6 +70,7 @@ export const api = {
     ),
   /** Thumbnails HA serves behind login come back as /api/... paths; route them through the add-on. */
   artUrl: (u?: string | null) => (!u ? '' : u.startsWith('/api/') ? `api/ha/image?path=${encodeURIComponent(u)}` : u),
+  cameraUrl: (entity: string) => `api/ha/camera/${entity}`,
   musicAssistantEntry: () => j<{ entry_id: string | null }>('api/ha/music_assistant'),
 
   calendars: () => j<CalendarInfo[]>('api/ha/calendars'),

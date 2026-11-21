@@ -1,4 +1,6 @@
-import { addDays, isToday, startOfDay } from 'date-fns';
+import { addDays, isToday, parseISO, startOfDay } from 'date-fns';
+import { Avatar } from '../lib/presence';
+import { RewardsView } from './RewardsView';
 import { Check, ChevronLeft, ChevronRight, Flame, Pencil, Star, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Modal } from '../components/Modal';
@@ -9,7 +11,7 @@ import { useKiosk } from '../lib/kiosk';
 import { useFolded } from '../lib/hooks';
 import { useStore } from '../lib/store';
 import type { Chore, Completions, Member, Period, TodoItem } from '../lib/types';
-import { dateKey, dueOn, initials, pastel, uid } from '../lib/util';
+import { assigneeOn, choresFor, dateKey, involves, pastel, uid } from '../lib/util';
 import { dateLong, t, weekdayNarrow } from '../lib/i18n';
 
 export const PERIODS: { id: Period; label: string; icon: string }[] = [
@@ -21,12 +23,11 @@ export const PERIODS: { id: Period; label: string; icon: string }[] = [
 const periodOf = (c: Chore): Period => c.period ?? 'anytime';
 
 function streakFor(member: Member, chores: Chore[], completions: Completions) {
-  const mine = chores.filter((c) => c.memberId === member.id);
-  if (!mine.length) return 0;
+  if (!chores.some((c) => involves(c, member.id))) return 0;
   let streak = 0;
   for (let i = 0; i < 365; i++) {
     const d = addDays(startOfDay(new Date()), -i);
-    const due = mine.filter((c) => dueOn(c, d));
+    const due = choresFor(chores, member.id, d);
     if (!due.length) continue;
     const done = new Set(completions[dateKey(d)] ?? []);
     if (due.every((c) => done.has(c.id))) streak++;
@@ -35,9 +36,18 @@ function streakFor(member: Member, chores: Chore[], completions: Completions) {
   return streak;
 }
 
-function pointsFor(member: Member, chores: Chore[], completions: Completions) {
-  const byId = new Map(chores.filter((c) => c.memberId === member.id).map((c) => [c.id, c]));
-  return Object.values(completions).reduce((sum, ids) => sum + ids.reduce((s, id) => s + (byId.get(id)?.points ?? 0), 0), 0);
+/** Stars earned: each completed chore counts for whoever it was assigned to that day. */
+export function pointsFor(member: Member, chores: Chore[], completions: Completions) {
+  const byId = new Map(chores.map((c) => [c.id, c]));
+  let total = 0;
+  for (const [day, ids] of Object.entries(completions)) {
+    const d = parseISO(day);
+    for (const id of ids) {
+      const c = byId.get(id);
+      if (c && assigneeOn(c, d) === member.id) total += c.points;
+    }
+  }
+  return total;
 }
 
 /** Items from a person's linked HA to-do list (e.g. a TaskMate child list). */
@@ -94,7 +104,7 @@ function MemberColumn({ m, day, onToggle, layout }: {
   const [filter, setFilter] = useState<Period | null>(null);
   const todo = useTodo(m.todo);
   const done = new Set(completions[dateKey(day)] ?? []);
-  const due = chores.filter((c) => c.memberId === m.id && dueOn(c, day));
+  const due = choresFor(chores, m.id, day);
   const todoOpen = isToday(day) ? todo.items : [];
   const total = due.length + todoOpen.length;
   const n = due.filter((c) => done.has(c.id)).length + todoOpen.filter((i) => i.status === 'completed').length;
@@ -128,9 +138,7 @@ function MemberColumn({ m, day, onToggle, layout }: {
     return (
       <section className="task-col folded" style={{ ['--member' as string]: m.color }}>
         <button className="fold-strip" onClick={toggleFold} aria-expanded={false} title={t('Show {name}', { name: m.name })}>
-          <span className="avatar lg" style={{ background: m.color }}>
-            {initials(m.name)}
-          </span>
+          <Avatar m={m} size="lg" />
           <span className="stat-pill">
             {n}/{total}
           </span>
@@ -143,9 +151,7 @@ function MemberColumn({ m, day, onToggle, layout }: {
   return (
     <section className={`task-col ${layout} ${total > 0 && n === total ? 'all-done' : ''}`} style={{ ['--member' as string]: m.color }}>
       <header className="task-head">
-        <span className="avatar lg" style={{ background: m.color }}>
-          {initials(m.name)}
-        </span>
+        <Avatar m={m} size="lg" />
         <div className="grow">
           <h2>{m.name}</h2>
           <div className="task-stats">
@@ -272,6 +278,25 @@ function GrocyColumn() {
 }
 
 export function ChoresView() {
+  const { nav } = useStore().data.settings;
+  const [pane, setPane] = useState<'tasks' | 'rewards'>('tasks');
+  if (!nav.rewardsInTasks) return <TasksBoard />;
+  return (
+    <div className="chores">
+      <div className="segmented tasks-switch">
+        <button className={pane === 'tasks' ? 'on' : ''} onClick={() => setPane('tasks')}>
+          {t('Tasks')}
+        </button>
+        <button className={pane === 'rewards' ? 'on' : ''} onClick={() => setPane('rewards')}>
+          🎁 {t('Rewards')}
+        </button>
+      </div>
+      {pane === 'tasks' ? <TasksBoard /> : <RewardsView />}
+    </div>
+  );
+}
+
+function TasksBoard() {
   const { data, set } = useStore();
   const { selected } = useHa();
   const { kiosk } = useKiosk();
@@ -292,7 +317,7 @@ export function ChoresView() {
       return { ...prev, [key]: [...list] };
     });
     if (!wasDone) {
-      const due = chores.filter((x) => x.memberId === m.id && dueOn(x, day));
+      const due = choresFor(chores, m.id, day);
       if (due.every((x) => x.id === c.id || done.has(x.id))) {
         setParty(m);
         setTimeout(() => setParty(null), 2600);
@@ -433,15 +458,54 @@ function ChoreEditor({ onClose }: { onClose: () => void }) {
             </div>
           </label>
           <label>
-            {t('Repeats')} {form.days.length === 0 && <span className="muted">· {t('every day')}</span>}
+            {t('Rotate weekly between')} <span className="muted small">· {t('optional')}</span>
             <div className="chips">
-              {weekdayNarrow().map((w, i) => (
-                <button key={i} className={`chip round ${form.days.includes(i) ? 'on' : ''}`} onClick={() => toggleDay(i)}>
-                  {w}
-                </button>
-              ))}
+              {members.map((m) => {
+                const on = !!form.rotate?.includes(m.id);
+                return (
+                  <button
+                    key={m.id}
+                    className={`chip ${on ? 'on' : ''}`}
+                    style={on ? { background: m.color, borderColor: m.color } : {}}
+                    onClick={() => {
+                      const r = on ? (form.rotate ?? []).filter((x) => x !== m.id) : [...(form.rotate ?? []), m.id];
+                      setForm({ ...form, rotate: r.length ? r : undefined, memberId: r[0] ?? form.memberId });
+                    }}
+                  >
+                    {m.name}
+                  </button>
+                );
+              })}
             </div>
           </label>
+          <label>
+            {t('How often')}
+            <div className="chips">
+              <button className={`chip ${!form.date ? 'on' : ''}`} onClick={() => setForm({ ...form, date: undefined })}>
+                {t('Repeats')}
+              </button>
+              <button className={`chip ${form.date ? 'on' : ''}`} onClick={() => setForm({ ...form, date: form.date ?? dateKey(new Date()) })}>
+                {t('Just once')}
+              </button>
+            </div>
+          </label>
+          {form.date ? (
+            <label>
+              {t('On')}
+              <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} style={{ maxWidth: 200 }} />
+            </label>
+          ) : (
+            <label>
+              {t('Repeats')} {form.days.length === 0 && <span className="muted">· {t('every day')}</span>}
+              <div className="chips">
+                {weekdayNarrow().map((w, i) => (
+                  <button key={i} className={`chip round ${form.days.includes(i) ? 'on' : ''}`} onClick={() => toggleDay(i)}>
+                    {w}
+                  </button>
+                ))}
+              </div>
+            </label>
+          )}
           <label className="row">
             {t('Stars')}
             <input type="number" min={0} max={20} value={form.points} onChange={(e) => setForm({ ...form, points: Number(e.target.value) || 0 })} style={{ width: 90 }} />
@@ -460,7 +524,7 @@ function ChoreEditor({ onClose }: { onClose: () => void }) {
         </div>
         <div className="chore-existing">
           {members.map((m) => {
-            const mine = chores.filter((c) => c.memberId === m.id);
+            const mine = chores.filter((c) => involves(c, m.id));
             if (!mine.length) return null;
             return (
               <div key={m.id}>
@@ -471,7 +535,8 @@ function ChoreEditor({ onClose }: { onClose: () => void }) {
                     <span className="grow">{c.title}</span>
                     <span className="muted small">
                       {PERIODS.find((p) => p.id === (c.period ?? 'anytime'))?.icon}{' '}
-                      {c.days.length ? c.days.map((d) => weekdayNarrow()[d]).join(' ') : t('Daily')} · {c.points}★
+                      {c.date ? `${t('Once')} ${c.date}` : c.days.length ? c.days.map((d) => weekdayNarrow()[d]).join(' ') : t('Daily')}
+                      {c.rotate?.length ? ` · 🔄 ${c.rotate.map((id) => members.find((x) => x.id === id)?.name ?? '?').join('/')}` : ''} · {c.points}★
                     </span>
                     <button className="icon-btn" onClick={() => setForm(c)} aria-label="Edit">
                       <Pencil size={18} />

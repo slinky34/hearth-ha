@@ -1,9 +1,10 @@
 
+import { AvatarFace } from '../lib/presence';
 import { useState } from 'react';
 import { useHa } from '../lib/ha';
 import { useNow } from '../lib/hooks';
 import { useStore } from '../lib/store';
-import { initials } from '../lib/util';
+import {  } from '../lib/util';
 import { useWeather, weatherIcon, weatherLabel } from '../lib/weather';
 import { Modal } from './Modal';
 import { NowPlayingPill } from './NowPlaying';
@@ -43,13 +44,13 @@ export function TopBar({ onMusic }: { onMusic: () => void }) {
               return (
                 <button
                   key={m.id}
-                  className={`avatar ${on ? 'on' : ''} ${selected.length && !on ? 'dim' : ''}`}
+                  className={`avatar ${m.photo ? 'has-photo' : ''} ${on ? 'on' : ''} ${selected.length && !on ? 'dim' : ''}`}
                   style={{ background: m.color }}
                   onClick={() => toggle(m.id)}
                   title={m.name}
                   aria-pressed={on}
                 >
-                  {initials(m.name)}
+                  <AvatarFace m={m} />
                 </button>
               );
             })}

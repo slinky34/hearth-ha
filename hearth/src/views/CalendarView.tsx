@@ -1,14 +1,16 @@
 import { addDays, addMonths, addWeeks, differenceInCalendarDays, endOfMonth, endOfWeek, isSameDay, isSameMonth, isToday, parseISO, startOfDay, startOfMonth, startOfWeek } from 'date-fns';
-import { ChevronLeft, ChevronRight, Clock, MapPin, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Avatar } from '../lib/presence';
+import { ChevronLeft, ChevronRight, Clock, MapPin, Pencil, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent } from 'react';
 import { Modal } from '../components/Modal';
 import { api, whoLine } from '../lib/api';
 import { toast } from '../components/Toast';
+import { MagicImport } from '../components/MagicImport';
 import { useEvents, useHa } from '../lib/ha';
 import { useNow } from '../lib/hooks';
 import { useStore } from '../lib/store';
 import type { CalEvent, CalendarViewMode, Member } from '../lib/types';
-import { dateKey, dueOn, eventMembers, fmtShortTime, fmtTime, initials, pastel, stripes } from '../lib/util';
+import { choresFor, dateKey, eventMembers, fmtShortTime, fmtTime, pastel, stripes } from '../lib/util';
 import { useWeather, weatherIcon } from '../lib/weather';
 import { dateLong, dateMedium, dateShort, format, monthYear, t } from '../lib/i18n';
 
@@ -39,9 +41,7 @@ export function Badges({ who, max = 3 }: { who: Member[]; max?: number }) {
   return (
     <span className="badges">
       {who.slice(0, max).map((m) => (
-        <span key={m.id} className="badge" style={{ background: m.color }} title={m.name}>
-          {initials(m.name).slice(0, 1)}
-        </span>
+        <Avatar key={m.id} m={m} size="xs" />
       ))}
       {who.length > max && <span className="badge more">+{who.length - max}</span>}
     </span>
@@ -54,11 +54,23 @@ export function MemberStrip() {
   const { selected, setSelected } = useHa();
   const today = startOfDay(new Date());
   const done = new Set(completions[dateKey(today)] ?? []);
-  const countdowns = settings.countdowns
-    .map((c) => ({ ...c, days: differenceInCalendarDays(parseISO(c.date), today) }))
+  // Birthdays within the next 30 days become countdowns automatically.
+  const birthdays = members
+    .filter((m) => m.birthday && /\d{2}-\d{2}$/.test(m.birthday))
+    .map((m) => {
+      const [mm, dd] = m.birthday!.slice(-5).split('-').map(Number);
+      let next = new Date(today.getFullYear(), mm - 1, dd);
+      if (next < today) next = new Date(today.getFullYear() + 1, mm - 1, dd);
+      return { id: `bday-${m.id}`, emoji: '🎂', title: t('{name}’s birthday', { name: m.name }), date: dateKey(next), days: differenceInCalendarDays(next, today) };
+    })
+    .filter((b) => b.days <= 30);
+  const countdowns = [
+    ...settings.countdowns.map((c) => ({ ...c, days: differenceInCalendarDays(parseISO(c.date), today) })),
+    ...birthdays,
+  ]
     .filter((c) => c.days >= 0)
     .sort((a, b) => a.days - b.days)
-    .slice(0, 2);
+    .slice(0, 3);
   if (!members.length && !countdowns.length) return null;
   return (
     <div className="member-strip">
@@ -69,7 +81,7 @@ export function MemberStrip() {
         </span>
       ))}
       {members.map((m) => {
-        const due = chores.filter((c) => c.memberId === m.id && dueOn(c, today));
+        const due = choresFor(chores, m.id, today);
         const n = due.filter((c) => done.has(c.id)).length;
         const pct = due.length ? (n / due.length) * 100 : 0;
         const on = selected.includes(m.id);
@@ -83,9 +95,7 @@ export function MemberStrip() {
             }}
             onClick={() => setSelected(on ? selected.filter((x) => x !== m.id) : [...selected, m.id])}
           >
-            <span className="badge" style={{ background: m.color }}>
-              {initials(m.name).slice(0, 1)}
-            </span>
+            <Avatar m={m} size="xs" />
             {m.name} <span className="chip-count">{n}/{due.length}</span>
           </button>
         );
@@ -102,6 +112,7 @@ export function CalendarView() {
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
   const [picked, setPicked] = useState<CalEvent | null>(null);
   const [addOn, setAddOn] = useState<Date | null>(null);
+  const [magic, setMagic] = useState(false);
 
   const range = useMemo(() => {
     if (mode === 'day') return { start: cursor, end: addDays(cursor, 1) };
@@ -170,6 +181,9 @@ export function CalendarView() {
           {loading && <RefreshCw className="spin muted" size={18} />}
         </div>
         <div className="nav-group">
+          <button className="btn magic-btn" onClick={() => setMagic(true)} disabled={calendars.length === 0}>
+            <Sparkles size={18} /> {t('Magic Import')}
+          </button>
           <div className="segmented">
             {MODES.map((m) => (
               <button key={m.id} className={mode === m.id ? 'on' : ''} onClick={() => setMode(m.id)}>
@@ -216,6 +230,7 @@ export function CalendarView() {
       </button>
 
       {picked && <EventDetail event={picked} onClose={() => setPicked(null)} onChanged={reload} />}
+      {magic && <MagicImport onClose={() => setMagic(false)} onDone={() => { setMagic(false); reload(); }} />}
       {addOn && (
         <AddEvent
           defaultDate={addOn}
@@ -595,7 +610,7 @@ export function EventDetail({ event: e, onClose, onChanged }: { event: CalEvent;
           <p className="who-row">
             {who.map((m) => (
               <span key={m.id} className="member-chip" style={{ background: pastel(m.color, 0.45) }}>
-                <span className="badge" style={{ background: m.color }}>{initials(m.name).slice(0, 1)}</span>
+                <Avatar m={m} size="xs" />
                 {m.name}
               </span>
             ))}
@@ -757,9 +772,7 @@ export function AddEvent({ defaultDate, existing, onClose, onCreated }: { defaul
                     title={viaCal ? t('Included through their calendar') : undefined}
                     aria-pressed={on}
                   >
-                    <span className="badge" style={{ background: m.color }}>
-                      {initials(m.name).slice(0, 1)}
-                    </span>
+                    <Avatar m={m} size="xs" />
                     {m.name}
                   </button>
                 );

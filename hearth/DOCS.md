@@ -21,3 +21,21 @@ To use Hearth on a tablet that isn't signed in to HA, set a host port for `8099/
 **Event locations:** suggestions come from Photon (photon.komoot.io, OpenStreetMap data) through the add-on. Only the text typed into the Location box is sent.
 
 **Photos from Immich:** set **Immich address** (for example `http://192.168.1.20:2283`) and an **Immich API key** (in Immich: Account settings → API keys) on the Configuration tab, then restart. Choose albums in Hearth under Settings → Photos.
+
+## Wall tablet setup (recommended)
+
+- **Tablet:** any 10–15" Android tablet works well (for example a Lenovo Tab or Samsung Galaxy Tab). Older Fire tablets work, but are slower with the busier screensavers.
+- **Browser:** [Fully Kiosk Browser](https://www.fully-kiosk.com/) in kiosk mode.
+  - Set the Start URL to your Home Assistant address (Hearth in the sidebar), or to Hearth's direct port.
+  - Turn on "Keep screen on", "Launch on boot", and "Remote administration".
+  - Add HA's **Fully Kiosk Browser** integration. Then pick its "Screen" switch in **Settings → Sleep mode**, so Hearth can turn the screen off at night.
+- **Mounting:** a slim VESA or adhesive wall mount, with a right-angle USB-C cable run through the wall or in a paintable cord cover, for the framed look.
+- **In Hearth:** turn on **Kiosk mode** on the tablet and set a PIN. Rewards approvals then need that PIN too.
+
+## Magic Import
+
+Magic Import needs an AI provider in Home Assistant (for example OpenAI, Google Gemini, Anthropic, or Ollama) with **AI Task** set up (Settings → Devices & services). Photos are saved briefly to `/media/hearth-import` so the AI can read them, and are deleted after a day.
+
+## Leave-by times
+
+Add the **Waze Travel Time** integration in Home Assistant (any route), then turn on **Settings → Calendar → Leave-by times**.

@@ -14,6 +14,10 @@ A self-hosted, Skylight-style family wall display that runs as a Home Assistant 
 - **Notifications**: on-screen reminders before events. The add-on can also send event reminders, timer alerts, and a daily "chores left" message to phones through HA notify services.
 - **Themes**: Hearth, Skylight, Midnight, Midnight Light, Nord, Dracula, Monokai, Rose, and Forest, with light/dark/automatic appearance.
 - **Languages**: English, Deutsch, Español, Français, Italiano, 日本語, 한국어, Nederlands, and Português.
+- **Rewards**: kids spend the stars they earn in a reward shop. Grown-ups approve requests, optionally with a PIN.
+- **Sleep mode**: dims the screen at night, and can turn a Fully Kiosk tablet's screen off and on.
+- **Magic Import**: photograph a flyer or paste an email, and HA's AI Task adds the events.
+- **Family notes, who's home, doorbell pop-up, leave-by times, birthdays, profile photos, chore rotation, quick add, an installable phone app, backup and restore.**
 - **Photos and screensaver**: photos from any folder under `/media` or `/share`, including subfolders. The screensaver shows the clock, weather, what's next, and what's playing.
 
 ### Integrations

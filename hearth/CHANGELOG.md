@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.12.0
+- **Faster updates:** Hearth now ships as ready-made images, so updating takes seconds instead of rebuilding on your HA box.
+- **Rewards:** a reward shop where kids spend the stars they earn. Grown-ups approve requests (with the kiosk PIN if you've set one), and a request can also notify your phones.
+- **Sleep mode:** at night the screen dims to a faint clock or goes black. If you pick a Fully Kiosk "Screen" switch, the add-on turns the tablet screen off at bedtime and on again in the morning.
+- **Magic Import:** snap a flyer or paste an email, and Home Assistant's AI Task finds the events for you to check and add.
+- **Family notes:** sticky notes on Today, optionally read aloud on a speaker.
+- **Who's home:** green or grey dots on each person, from their HA person entity.
+- **Doorbell pop-up:** when the doorbell rings, the camera shows on screen.
+- **Leave-by times:** drive time and when to leave for events with a location (Waze Travel Time).
+- **Birthdays:** automatic countdown chips, plus a celebration banner on the day.
+- **Chores:** rotate weekly between kids, or set one-off chores on a date.
+- **Profile photos** for each person.
+- **Quick add:** the + on Today adds an event, Magic Import, a list item, a meal, or a note.
+- **Installable app:** add Hearth to a phone's home screen.
+- **Backup and restore** in Settings → About.
+- **Sidebar:** hide screens you don't use, and optionally show Rewards inside Tasks.
+
 ## 0.11.0
 - **Screensaver styles:** Ken Burns, Classic, Floating, Photo Wall, Vintage Prints, Sliding Panels, Flip-up, Reflections, Photo Mobile, or Random (a different one each time).
 - New **Settings → Screensaver** section:

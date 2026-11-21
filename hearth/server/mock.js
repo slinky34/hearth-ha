@@ -108,6 +108,7 @@ export function createMockHA() {
     'scene.movie_time': ['Movie Time', 'scening'],
     'script.good_night': ['Good Night', 'off'],
   };
+  let doorbell = 'off';
   const grocyList = [
     { id: 1, product_id: 3, note: 'Oat milk', amount: 2, done: 0, product: { name: 'Oat milk' } },
     { id: 2, product_id: 7, note: '', amount: 1, done: 0, product: { name: 'Sourdough bread' } },
@@ -155,6 +156,13 @@ export function createMockHA() {
       { entity_id: 'weather.home', state: forecast()[0].condition, attributes: { friendly_name: 'Home', temperature: 54, temperature_unit: '°F', humidity: 61 } },
       ...Object.keys(players).map(playerState),
       ...Object.entries(toggles).map(([id, v]) => ts(id, v, id.startsWith('light.') && v[1] === 'on' ? { brightness: 200 } : {})),
+      ts('camera.front_door', ['Front Door Camera', 'idle']),
+      ts('binary_sensor.doorbell', ['Doorbell', doorbell]),
+      ts('tts.google_translate_en_com', ['Google Translate en com', 'unknown']),
+      ts('switch.kitchen_tablet_screen', ['Kitchen Tablet Screen', 'on']),
+      ts('person.jordan', ['Jordan', 'home']),
+      ts('person.alex', ['Alex', 'not_home']),
+      ts('person.sam', ['Sam', 'home']),
       ts('sensor.living_room_temperature', ['Living Room Temperature', '70.5'], { unit_of_measurement: '°F', device_class: 'temperature' }),
       ts('sensor.front_door_battery', ['Front Door Battery', '82'], { unit_of_measurement: '%', device_class: 'battery' }),
       ts('binary_sensor.front_door', ['Front Door', 'off'], { device_class: 'door' }),
@@ -233,6 +241,14 @@ export function createMockHA() {
   const cSummary = (c) => ({ id: c.id, name: c.name, description: c.description, image: `api/bar/image?u=${encodeURIComponent('mock:' + c.id)}` });
 
   return {
+    ring() {
+      doorbell = 'on';
+      setTimeout(() => (doorbell = 'off'), 4000);
+    },
+    cameraSnapshot() {
+      const t = new Date().toLocaleTimeString();
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720"><rect width="1280" height="720" fill="#2b3340"/><rect x="460" y="140" width="360" height="520" rx="12" fill="#6b4a33"/><circle cx="780" cy="400" r="12" fill="#e3b92f"/><text x="40" y="60" font-family="monospace" font-size="34" fill="#fff">FRONT DOOR  ${t}</text></svg>`;
+    },
     immichAlbums() {
       return [
         { id: '00000000-0000-4000-8000-00000000a001', name: 'Family 2026', count: 5 },
@@ -435,6 +451,20 @@ export function createMockHA() {
           const artists = [...new Set(ARTISTS)].map((name, i) => ({ media_type: 'artist', name, uri: `library://artist/${i + 1}`, image: null })).filter((x) => hit(x.name));
           return ok({ changed_states: [], service_response: { tracks, albums, playlists, artists, radio: [] } });
         }
+        case 'ai_task.generate_data': {
+          const d = (n) => dateKey(addDays(new Date(), n));
+          const events = [
+            { title: 'Picture Day', date: d(6), allDay: true, location: 'Lincoln Elementary' },
+            { title: 'Fall Concert', date: d(9), start: '18:30', end: '19:30', allDay: false, location: 'School gym' },
+            { title: 'Bake Sale', date: d(13), start: '08:00', end: '11:00', allDay: false, location: 'Front lobby' },
+          ];
+          return ok({ changed_states: [], service_response: { conversation_id: 'x', data: '```json\n' + JSON.stringify(events, null, 2) + '\n```' } });
+        }
+        case 'waze_travel_time.get_travel_times':
+          return ok({ changed_states: [], service_response: { routes: [{ duration: 12 + (String(body.destination).length % 20), distance: 6.4, name: 'Main St', street_names: ['Main St'] }] } });
+        case 'tts.speak':
+          console.log(`[mock tts] ${body.media_player_entity_id}: ${body.message}`);
+          return ok([]);
         case 'music_assistant.play_media':
           if (entities.some((e) => !MASS.has(e)))
             return { status: 400, data: { message: `Entity ${entities[0]} is not a Music Assistant player` } };

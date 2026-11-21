@@ -15,7 +15,7 @@ const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.11.0';
+const VERSION = process.env.HEARTH_VERSION || '0.12.0';
 
 // Add-on options (set on the add-on's Configuration tab in Home Assistant).
 let options = {};
@@ -153,6 +153,9 @@ const SERVICES = new Set([
   'mealie.get_recipe',
   'mealie.get_recipes',
   'mealie.set_mealplan',
+  'ai_task.generate_data',
+  'waze_travel_time.get_travel_times',
+  'tts.speak',
 ]);
 // Extra checks for services that could otherwise touch more than intended.
 const SERVICE_GUARDS = {
@@ -163,12 +166,12 @@ const ENTITY_RE = /^[a-z0-9_]+\.[a-z0-9_]+$/;
 // Domains Hearth may read and list.
 const ENTITY_DOMAINS = [
   'calendar', 'todo', 'weather', 'media_player', 'light', 'switch', 'fan', 'input_boolean',
-  'scene', 'script', 'sensor', 'binary_sensor', 'climate',
+  'scene', 'script', 'sensor', 'binary_sensor', 'climate', 'person', 'camera', 'event', 'tts', 'number',
 ];
 const haOrigin = () => (haBase ? haBase.replace(/\/api$/, '') : null);
 
 // ---------- JSON store ----------
-const STORE_KEYS = new Set(['members', 'chores', 'completions', 'meals', 'settings', 'timers']);
+const STORE_KEYS = new Set(['members', 'chores', 'completions', 'meals', 'settings', 'timers', 'rewards', 'redemptions', 'notes']);
 let store = { rev: 0, data: {} };
 try {
   store = JSON.parse(fs.readFileSync(STORE_FILE, 'utf8'));
@@ -203,6 +206,7 @@ const TYPES = {
   '.woff2': 'font/woff2',
   '.woff': 'font/woff',
   '.ico': 'image/x-icon',
+  '.webmanifest': 'application/manifest+json',
 };
 const PHOTO_RE = /\.(jpe?g|png|gif|webp|avif)$/i;
 
@@ -294,6 +298,10 @@ async function route(req, res) {
   }
   const m = req.method;
 
+  if (p === '/api/mock/ring' && mock) {
+    mock.ring();
+    return send(res, 200, { ok: true });
+  }
   if (p === '/api/status') return send(res, 200, { mode, version: VERSION, photoDir: PHOTO_DIR });
 
   // --- Home Assistant proxy ---
@@ -400,6 +408,31 @@ async function route(req, res) {
     return send(res, 200, Buffer.from(await img.arrayBuffer()), { 'Content-Type': img.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'max-age=3600' });
   }
   // --- Bar Assistant (cocktails) ---
+  // --- Magic Import: save a flyer photo where HA's AI Task can read it (media source "local") ---
+  if (p === '/api/import/image' && m === 'POST') {
+    const name = safePhotoName(url.searchParams.get('name') || 'import.jpg') || 'import.jpg';
+    const buf = await readBody(req, 15_000_000);
+    const dir = IN_ADDON ? '/media/hearth-import' : path.join(DATA_DIR, 'import');
+    await fsp.mkdir(dir, { recursive: true });
+    const file = `${Date.now()}-${name.replace(/[^\w.-]+/g, '_')}`;
+    await fsp.writeFile(path.join(dir, file), buf);
+    // Clean up imports older than a day.
+    for (const f of await fsp.readdir(dir).catch(() => [])) {
+      const t = Number(f.split('-')[0]);
+      if (t && Date.now() - t > 864e5) fsp.rm(path.join(dir, f), { force: true }).catch(() => undefined);
+    }
+    return send(res, 200, { media_id: `media-source://media_source/local/hearth-import/${file}` });
+  }
+
+  // --- Doorbell / camera snapshot ---
+  match = p.match(/^\/api\/ha\/camera\/(camera\.[a-z0-9_]+)$/);
+  if (match && m === 'GET') {
+    if (mock) return send(res, 200, mock.cameraSnapshot(), { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store' });
+    const r = await fetch(`${haBase}/camera_proxy/${match[1]}`, { headers: { Authorization: `Bearer ${haToken}` }, signal: AbortSignal.timeout(10000) });
+    if (!r.ok) return send(res, r.status, 'Camera unavailable');
+    return send(res, 200, Buffer.from(await r.arrayBuffer()), { 'Content-Type': r.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'no-store' });
+  }
+
   // --- Immich (photos) ---
   if (p === '/api/immich/status' && m === 'GET') return send(res, 200, await immichStatus());
   if (p === '/api/immich/albums' && m === 'GET') {
@@ -808,11 +841,27 @@ async function sendNotify(targets, title, message) {
   return ok;
 }
 
+// Same rules as the app: one-off date or weekdays; weekly rotation (weeks start Monday).
+const choreDue = (c, d) => (c.date ? c.date === localKey(d) : !c.days?.length || c.days.includes(d.getDay()));
+const choreAssignee = (c, d) =>
+  c.rotate?.length ? c.rotate[Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5 + 3) / 7) % c.rotate.length] : c.memberId;
+
 const notifySettings = () => store.data.settings?.notify ?? {};
 const fmtClock = (d) => {
   const h24 = store.data.settings?.clock24;
   return h24 ? `${pad2(d.getHours())}:${pad2(d.getMinutes())}` : `${d.getHours() % 12 || 12}:${pad2(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`;
 };
+
+function tickRewards() {
+  const n = notifySettings();
+  if (!n.targets?.length) return;
+  for (const r of store.data.redemptions ?? []) {
+    if (r.status !== 'pending' || sent.has(`reward:${r.id}`) || Date.now() - r.at > 3600000) continue;
+    sent.add(`reward:${r.id}`);
+    const who = (store.data.members ?? []).find((m) => m.id === r.memberId)?.name ?? 'Someone';
+    sendNotify(n.targets, '⭐ Reward request', `${who} wants: ${r.title} (${r.cost} stars). Approve it on the Rewards screen.`);
+  }
+}
 
 function tickTimers() {
   const n = notifySettings();
@@ -823,6 +872,26 @@ function tickTimers() {
     if (sent.has(key) || Date.now() - t.endsAt > 5 * 60000) continue;
     sent.add(key);
     sendNotify(n.targets, '⏰ Timer done', `${t.label || 'Timer'} is done`);
+  }
+}
+
+// Sleep mode: turn a tablet's screen (e.g. Fully Kiosk "switch.<tablet>_screen") off at bedtime, on in the morning.
+async function tickSleep() {
+  const sl = store.data.settings?.sleep;
+  if (!sl?.enabled || !sl.screenEntity || !ENTITY_RE.test(sl.screenEntity)) return;
+  const domain = sl.screenEntity.split('.')[0];
+  if (!['switch', 'light', 'input_boolean'].includes(domain)) return;
+  const now = new Date();
+  const hhmm = `${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+  const action = hhmm === sl.start ? 'turn_off' : hhmm === sl.end ? 'turn_on' : null;
+  const key = `sleep:${localKey(now)}:${action}`;
+  if (!action || sent.has(key)) return;
+  sent.add(key);
+  try {
+    await ha('POST', `/services/${domain}/${action}`, { entity_id: sl.screenEntity });
+    console.log(`[hearth] sleep mode: ${action} ${sl.screenEntity}`);
+  } catch (e) {
+    console.warn('[hearth] sleep mode:', e.message);
   }
 }
 
@@ -866,9 +935,7 @@ async function tickMinute() {
       const done = new Set(store.data.completions?.[localKey(now)] ?? []);
       const lines = (store.data.members ?? [])
         .map((m) => {
-          const left = (store.data.chores ?? []).filter(
-            (c) => c.memberId === m.id && (!c.days?.length || c.days.includes(now.getDay())) && !done.has(c.id),
-          );
+          const left = (store.data.chores ?? []).filter((c) => choreDue(c, now) && choreAssignee(c, now) === m.id && !done.has(c.id));
           return left.length ? `${m.name}: ${left.map((c) => c.title).join(', ')}` : null;
         })
         .filter(Boolean);
@@ -879,7 +946,9 @@ async function tickMinute() {
 }
 
 setInterval(tickTimers, 5000);
+setInterval(tickRewards, 10000);
 setInterval(() => tickMinute().catch(() => undefined), 60000);
+setInterval(() => tickSleep().catch(() => undefined), 20000);
 
 server.listen(PORT, () => {
   console.log(`[hearth] v${VERSION} listening on :${PORT} (mode: ${mode})`);

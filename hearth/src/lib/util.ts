@@ -46,7 +46,18 @@ export function pastel(hex: string, amount = 0.32) {
 
 import type { Chore as _Chore } from './types';
 /** Whether a chore is due on a given day. */
-export const dueOn = (c: _Chore, d: Date) => c.days.length === 0 || c.days.includes(d.getDay());
+/** Whether a chore happens on a day (one-off date, or repeating weekdays). */
+export const dueOn = (c: _Chore, d: Date) =>
+  c.date ? c.date === dateKey(d) : c.days.length === 0 || c.days.includes(d.getDay());
+/** Week number used for weekly chore rotation (weeks start Monday). */
+export const weekIndex = (d: Date) => Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 864e5 + 3) / 7);
+/** Who does a chore on a given day (rotation-aware). */
+export const assigneeOn = (c: _Chore, d: Date) => (c.rotate?.length ? c.rotate[weekIndex(d) % c.rotate.length] : c.memberId);
+/** A person's chores for a day. */
+export const choresFor = (chores: _Chore[], memberId: string, d: Date) =>
+  chores.filter((c) => dueOn(c, d) && assigneeOn(c, d) === memberId);
+/** Chores that can ever belong to a person. */
+export const involves = (c: _Chore, memberId: string) => c.memberId === memberId || !!c.rotate?.includes(memberId);
 
 /** Diagonal stripes in several people's colors, for shared events. */
 export function stripes(colors: string[], amount = 0.42) {

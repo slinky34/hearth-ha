@@ -1,6 +1,7 @@
 import { Lock, Play, Plus, Trash2 } from 'lucide-react';
+import { PhotoPicker } from '../components/PhotoPicker';
 import { useHa } from '../lib/ha';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { useKiosk } from '../lib/kiosk';
 import { LANGUAGES, t } from '../lib/i18n';
@@ -9,11 +10,13 @@ import { CONTROL_DOMAINS } from './HomeView';
 import { EntityPicker } from '../components/EntityPicker';
 import { Section } from '../components/Section';
 import { Integrations } from '../components/Integrations';
+import { toast } from '../components/Toast';
 import { ImmichSettings } from '../components/ImmichSettings';
 import { SS_STYLES } from './Screensaver';
+import { TABS } from '../lib/tabs';
 import { useStore } from '../lib/store';
 import type { Member, Settings } from '../lib/types';
-import { PALETTE, initials, uid } from '../lib/util';
+import { PALETTE, uid } from '../lib/util';
 
 export function SettingsView() {
   const { data, set, mode } = useStore();
@@ -26,6 +29,34 @@ export function SettingsView() {
   const todos = entities.filter((e) => e.entity_id.startsWith('todo.'));
   const weathers = entities.filter((e) => e.entity_id.startsWith('weather.'));
   const players = entities.filter((e) => e.entity_id.startsWith('media_player.'));
+  const persons = entities.filter((e) => e.entity_id.startsWith('person.'));
+  const ttsEngines = entities.filter((e) => e.entity_id.startsWith('tts.'));
+  const cameras = entities.filter((e) => e.entity_id.startsWith('camera.'));
+  const doorbellTriggers = entities.filter((e) => e.entity_id.startsWith('binary_sensor.') || e.entity_id.startsWith('event.'));
+  const screenSwitches = entities.filter((e) => /^(switch|light|input_boolean)\./.test(e.entity_id));
+  const restoreInput = useRef<HTMLInputElement>(null);
+  const exportData = () => {
+    const blob = new Blob([JSON.stringify({ hearth: 1, exported: new Date().toISOString(), data }, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `hearth-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const importData = async (f: File) => {
+    try {
+      const parsed = JSON.parse(await f.text());
+      const d = parsed?.data ?? parsed;
+      if (!d || typeof d !== 'object' || !Array.isArray(d.members)) throw new Error(t('That file isn’t a Hearth backup.'));
+      if (!confirm(t('Replace all of Hearth’s family data and settings with this backup?'))) return;
+      (['members', 'chores', 'completions', 'meals', 'settings', 'rewards', 'redemptions', 'notes', 'timers'] as const).forEach((k) => {
+        if (d[k] !== undefined) set(k, d[k]);
+      });
+      toast(t('Backup restored'), 'info');
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
   const controllable = entities.filter((e) => CONTROL_DOMAINS.includes(e.entity_id.split('.')[0]));
   const n = (patch: Partial<Settings['notify']>) => set('settings', (p) => ({ ...p, notify: { ...p.notify, ...patch } }));
   const [targets, setTargets] = useState<string[]>([]);
@@ -51,9 +82,7 @@ export function SettingsView() {
         </p>
         {members.map((m) => (
           <div key={m.id} className="member-row">
-            <span className="avatar lg" style={{ background: m.color }}>
-              {initials(m.name)}
-            </span>
+            <PhotoPicker m={m} onChange={(photo) => updateMember(m.id, { photo })} />
             <div className="grow">
               <input value={m.name} onChange={(e) => updateMember(m.id, { name: e.target.value })} aria-label="Name" />
               <div className="swatches">
@@ -97,6 +126,23 @@ export function SettingsView() {
                   ))}
                 </select>
               </label>
+              <div className="row wrap-row">
+                <label className="inline-select">
+                  <span className="muted small">{t('Who’s home (HA person)')}</span>
+                  <select value={m.person ?? ''} onChange={(e) => updateMember(m.id, { person: e.target.value || undefined })}>
+                    <option value="">{t('None')}</option>
+                    {persons.map((p) => (
+                      <option key={p.entity_id} value={p.entity_id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="inline-select">
+                  <span className="muted small">{t('Birthday')}</span>
+                  <input type="date" value={m.birthday ?? ''} onChange={(e) => updateMember(m.id, { birthday: e.target.value || undefined })} />
+                </label>
+              </div>
             </div>
             <button
               className="icon-btn"
@@ -304,6 +350,23 @@ export function SettingsView() {
             <input type="time" value={settings.notify.choreTime} onChange={(e) => n({ choreTime: e.target.value })} />
           </label>
         </div>
+        <h3 className="sub">{t('Read notes aloud')}</h3>
+        <div className="settings-grid">
+          <label>
+            {t('Voice (text-to-speech)')}
+            <select value={settings.tts.engine} onChange={(e) => s('tts', { ...settings.tts, engine: e.target.value })}>
+              <option value="">{t('None')}</option>
+              {ttsEngines.map((x) => <option key={x.entity_id} value={x.entity_id}>{x.name}</option>)}
+            </select>
+          </label>
+          <label>
+            {t('Speaker')}
+            <select value={settings.tts.speaker} onChange={(e) => s('tts', { ...settings.tts, speaker: e.target.value })}>
+              <option value="">{t('None')}</option>
+              {players.map((x) => <option key={x.entity_id} value={x.entity_id}>{x.name}</option>)}
+            </select>
+          </label>
+        </div>
       </Section>
 
       <Section id="calendar" title={t('Calendar')}>
@@ -347,6 +410,85 @@ export function SettingsView() {
             <Plus size={18} /> {t('Add countdown')}
           </button>
         </div>
+        <h3 className="sub">{t('Leave-by times')}</h3>
+        <p className="muted small">{t('Shows drive time and when to leave for events with a location, using the Waze Travel Time integration in Home Assistant.')}</p>
+        <div className="settings-grid">
+          <label className="row check-row">
+            <input type="checkbox" checked={settings.leaveBy.enabled} onChange={(e) => s('leaveBy', { ...settings.leaveBy, enabled: e.target.checked })} />
+            {t('Show leave-by times')}
+          </label>
+          <label>
+            {t('Region')}
+            <select value={settings.leaveBy.region} onChange={(e) => s('leaveBy', { ...settings.leaveBy, region: e.target.value })}>
+              {[['us', 'US'], ['na', 'North America'], ['eu', 'Europe'], ['il', 'Israel'], ['au', 'Australia']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </label>
+          <label>
+            {t('Extra minutes')}
+            <input type="number" min={0} max={60} value={settings.leaveBy.buffer} onChange={(e) => s('leaveBy', { ...settings.leaveBy, buffer: Number(e.target.value) || 0 })} />
+          </label>
+        </div>
+      </Section>
+
+      <Section id="sleep" title={t('Sleep mode')} summary={settings.sleep.enabled ? `${settings.sleep.start}–${settings.sleep.end}` : t('Off')}>
+        <p className="muted small">{t('At night the screen dims to a faint clock (or goes black). Tap to wake it for 5 minutes. Pick a Fully Kiosk “Screen” switch to also turn the tablet’s screen fully off and back on in the morning.')}</p>
+        <div className="settings-grid">
+          <label className="row check-row">
+            <input type="checkbox" checked={settings.sleep.enabled} onChange={(e) => s('sleep', { ...settings.sleep, enabled: e.target.checked })} />
+            {t('Use sleep mode')}
+          </label>
+          <label>
+            {t('Bedtime')}
+            <input type="time" value={settings.sleep.start} onChange={(e) => s('sleep', { ...settings.sleep, start: e.target.value })} />
+          </label>
+          <label>
+            {t('Wake up')}
+            <input type="time" value={settings.sleep.end} onChange={(e) => s('sleep', { ...settings.sleep, end: e.target.value })} />
+          </label>
+          <label>
+            {t('Look')}
+            <select value={settings.sleep.mode} onChange={(e) => s('sleep', { ...settings.sleep, mode: e.target.value as 'dim' | 'black' })}>
+              <option value="dim">{t('Dim clock')}</option>
+              <option value="black">{t('Black')}</option>
+            </select>
+          </label>
+          <label>
+            {t('Tablet screen switch (optional)')}
+            <select value={settings.sleep.screenEntity} onChange={(e) => s('sleep', { ...settings.sleep, screenEntity: e.target.value })}>
+              <option value="">{t('None')}</option>
+              {screenSwitches.map((x) => <option key={x.entity_id} value={x.entity_id}>{x.name}</option>)}
+            </select>
+          </label>
+        </div>
+      </Section>
+
+      <Section id="doorbell" title={t('Doorbell')} summary={settings.doorbell.trigger ? undefined : t('Off')}>
+        <p className="muted small">{t('When the doorbell rings, show the camera on screen.')}</p>
+        <div className="settings-grid">
+          <label>
+            {t('Doorbell sensor or event')}
+            <select value={settings.doorbell.trigger} onChange={(e) => s('doorbell', { ...settings.doorbell, trigger: e.target.value })}>
+              <option value="">{t('None')}</option>
+              {doorbellTriggers.map((x) => <option key={x.entity_id} value={x.entity_id}>{x.name}</option>)}
+            </select>
+          </label>
+          <label>
+            {t('Camera')}
+            <select value={settings.doorbell.camera} onChange={(e) => s('doorbell', { ...settings.doorbell, camera: e.target.value })}>
+              <option value="">{t('None')}</option>
+              {cameras.map((x) => <option key={x.entity_id} value={x.entity_id}>{x.name}</option>)}
+            </select>
+          </label>
+          <label>
+            {t('Show for (seconds)')}
+            <input type="number" min={10} max={300} value={settings.doorbell.seconds} onChange={(e) => s('doorbell', { ...settings.doorbell, seconds: Number(e.target.value) || 30 })} />
+          </label>
+        </div>
+        {mode === 'demo' && settings.doorbell.trigger && (
+          <div>
+            <button className="btn" onClick={() => fetch('api/mock/ring')}>🔔 {t('Ring (demo)')}</button>
+          </div>
+        )}
       </Section>
 
       <Section id="music" title={t('Music')} summary={settings.musicPlayers.length ? t('{n} chosen', { n: settings.musicPlayers.length }) : t('All speakers')}>
@@ -432,6 +574,37 @@ export function SettingsView() {
         </div>
       </Section>
 
+      <Section id="sidebar" title={t('Sidebar')} summary={settings.nav.hidden.length ? t('{n} hidden', { n: settings.nav.hidden.length }) : undefined}>
+        <p className="muted small">{t('Choose which screens appear in the sidebar. Today and Settings are always there.')}</p>
+        <div className="nav-list">
+          {TABS.filter((x) => x.id !== 'today').map(({ id, label, Icon }) => {
+            const shown = !settings.nav.hidden.includes(id);
+            const merged = id === 'rewards' && settings.nav.rewardsInTasks;
+            return (
+              <label key={id} className="list-row row">
+                <input
+                  type="checkbox"
+                  checked={shown && !merged}
+                  disabled={merged}
+                  onChange={() => s('nav', { ...settings.nav, hidden: shown ? [...settings.nav.hidden, id] : settings.nav.hidden.filter((x) => x !== id) })}
+                />
+                <Icon size={20} />
+                <span className="grow">{t(label)}</span>
+                {merged && <span className="muted small">{t('inside Tasks')}</span>}
+              </label>
+            );
+          })}
+        </div>
+        <label className="row check-row">
+          <input type="checkbox" checked={settings.nav.rewardsInTasks} onChange={(e) => s('nav', { ...settings.nav, rewardsInTasks: e.target.checked })} />
+          {t('Show Rewards inside Tasks instead of its own tab')}
+        </label>
+        <label className="row check-row">
+          <input type="checkbox" checked={settings.nav.showFull} onChange={(e) => s('nav', { ...settings.nav, showFull: e.target.checked })} />
+          {t('Show the Fullscreen button')}
+        </label>
+      </Section>
+
       <Section id="kiosk-mode" title={t('Kiosk mode')}>
         <p className="muted small">
           {t('For a wall tablet: goes fullscreen (hiding Home Assistant’s sidebar too), keeps the screen awake, hides the cursor, and locks Settings, chore editing, and photo deletion. It only applies to this screen. To leave, hold the 🏡 logo for 2 seconds or tap Locked. You can also add ?kiosk to the end of its address to turn it on.')}
@@ -452,6 +625,10 @@ export function SettingsView() {
             <Lock size={18} /> {t('Turn on kiosk mode on this screen')}
           </button>
         </div>
+        <label className="row check-row">
+          <input type="checkbox" checked={settings.rewardPin} onChange={(e) => s('rewardPin', e.target.checked)} />
+          {t('Ask for this PIN before approving rewards')}
+        </label>
       </Section>
 
       <Integrations />
@@ -462,6 +639,13 @@ export function SettingsView() {
           {mode === 'remote' && t('Connected to Home Assistant via HA_URL.')}
           {mode === 'demo' && t('Demo mode: showing sample calendars, lists, and weather. Run as a Home Assistant add-on, or set HA_URL and HA_TOKEN, to use your real data.')}
         </p>
+        <h3 className="sub">{t('Backup')}</h3>
+        <p className="muted small">{t('Hearth’s data (family, chores, rewards, meals, notes, settings) is included in Home Assistant backups. You can also save a copy here.')}</p>
+        <div className="row">
+          <button className="btn" onClick={exportData}>{t('Download backup')}</button>
+          <button className="btn ghost" onClick={() => restoreInput.current?.click()}>{t('Restore from file')}</button>
+          <input ref={restoreInput} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importData(f); }} />
+        </div>
       </Section>
     </div>
   );

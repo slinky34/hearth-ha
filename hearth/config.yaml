@@ -1,6 +1,7 @@
 name: Hearth
-version: "0.11.0"
+version: "0.12.0"
 slug: hearth
+image: ghcr.io/slinky34/hearth-{arch}
 description: Family wall calendar, chores, lists, meal plan, and photo frame for wall-mounted tablets
 url: https://github.com/slinky34/hearth-ha
 arch:

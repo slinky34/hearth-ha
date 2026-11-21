@@ -6,6 +6,12 @@ export interface Member {
   calendars: string[];
   /** Optional HA to-do list with this person's chores (e.g. a TaskMate child list). */
   todo?: string;
+  /** Small profile photo (data URL, resized in the browser). */
+  photo?: string;
+  /** HA person entity, for the "who's home" dot. */
+  person?: string;
+  /** Birthday as yyyy-MM-dd (year optional: 0000-MM-dd). */
+  birthday?: string;
 }
 
 export type Period = 'morning' | 'afternoon' | 'evening' | 'anytime';
@@ -20,6 +26,35 @@ export interface Chore {
   points: number;
   /** Time of day for routine grouping; missing = anytime chore. */
   period?: Period;
+  /** Rotate weekly between these people (overrides memberId). */
+  rotate?: string[];
+  /** One-off chore on this date (yyyy-MM-dd) instead of repeating. */
+  date?: string;
+}
+
+export interface Reward {
+  id: string;
+  title: string;
+  emoji: string;
+  cost: number;
+}
+
+export interface Redemption {
+  id: string;
+  memberId: string;
+  rewardId: string;
+  title: string;
+  cost: number;
+  at: number;
+  status: 'pending' | 'approved' | 'denied';
+}
+
+export interface Note {
+  id: string;
+  text: string;
+  color: string;
+  from?: string;
+  at: number;
 }
 
 /** dateKey (yyyy-MM-dd) -> ids of chores completed that day */
@@ -65,6 +100,18 @@ export interface Settings {
   /** Immich photo sources (albums by id, plus favorites). */
   immich: { albums: string[]; favorites: boolean };
   choreLayout: 'cards' | 'compact';
+  /** Night sleep mode (dims the screen; can turn a Fully Kiosk tablet screen off). */
+  sleep: { enabled: boolean; start: string; end: string; mode: 'dim' | 'black'; screenEntity: string };
+  /** Doorbell pop-up: when the trigger fires, show the camera. */
+  doorbell: { trigger: string; camera: string; seconds: number };
+  /** Read notes aloud: TTS entity + speaker. */
+  tts: { engine: string; speaker: string };
+  /** "Leave by" hints using Waze travel time from home. */
+  leaveBy: { enabled: boolean; region: string; buffer: number };
+  /** Ask for the kiosk PIN before approving rewards. */
+  rewardPin: boolean;
+  /** Sidebar: hidden tabs, and Rewards shown inside Tasks instead of its own tab. */
+  nav: { hidden: string[]; rewardsInTasks: boolean; showFull: boolean };
 }
 
 export interface Countdown {
@@ -105,6 +152,9 @@ export interface StoreData {
   meals: Meals;
   settings: Settings;
   timers: Timer[];
+  rewards: Reward[];
+  redemptions: Redemption[];
+  notes: Note[];
 }
 
 export interface CalendarInfo {

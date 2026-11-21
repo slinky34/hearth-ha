@@ -1,6 +1,4 @@
-import {
-  BookOpen, CalendarDays, House, Image, LayoutGrid, ListChecks, Lock, Maximize, Music, Settings as Gear, Sparkles, UtensilsCrossed,
-} from 'lucide-react';
+import { Lock, Maximize, Settings as Gear } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal } from './components/Modal';
 import { TopBar } from './components/TopBar';
@@ -8,6 +6,8 @@ import { HaProvider } from './lib/ha';
 import { useIdle } from './lib/hooks';
 import { KioskProvider, enterFullscreen, useKiosk } from './lib/kiosk';
 import { MusicProvider } from './lib/music';
+import { TABS } from './lib/tabs';
+import { PresenceProvider } from './lib/presence';
 import { StoreProvider, useStore } from './lib/store';
 import { WeatherProvider } from './lib/weather';
 import { applyPalette } from './lib/themes';
@@ -15,6 +15,8 @@ import { setLanguage, t } from './lib/i18n';
 import { TimerAlarm } from './components/Timers';
 import { Reminders } from './components/Reminders';
 import { Toaster } from './components/Toast';
+import { SleepOverlay } from './components/SleepOverlay';
+import { Doorbell } from './components/Doorbell';
 import { CalendarView } from './views/CalendarView';
 import { ChoresView } from './views/ChoresView';
 import { HomeView } from './views/HomeView';
@@ -22,22 +24,12 @@ import { ListsView } from './views/ListsView';
 import { MealsView } from './views/MealsView';
 import { MusicView } from './views/MusicView';
 import { RecipesView } from './views/RecipesView';
+import { RewardsView } from './views/RewardsView';
 import { PhotosView } from './views/PhotosView';
 import { Screensaver } from './views/Screensaver';
 import { SettingsView } from './views/SettingsView';
 import { TodayView } from './views/TodayView';
 
-const TABS = [
-  { id: 'today', label: 'Today', Icon: LayoutGrid },
-  { id: 'calendar', label: 'Calendar', Icon: CalendarDays },
-  { id: 'chores', label: 'Tasks', Icon: Sparkles },
-  { id: 'lists', label: 'Lists', Icon: ListChecks },
-  { id: 'meals', label: 'Meals', Icon: UtensilsCrossed },
-  { id: 'recipes', label: 'Recipes', Icon: BookOpen },
-  { id: 'photos', label: 'Photos', Icon: Image },
-  { id: 'music', label: 'Music', Icon: Music },
-  { id: 'home', label: 'Home', Icon: House },
-] as const;
 type Tab = (typeof TABS)[number]['id'] | 'settings';
 const ALL_TABS: string[] = [...TABS.map((t) => t.id), 'settings'];
 
@@ -119,6 +111,14 @@ function Shell() {
   const [recipeToOpen, setRecipeToOpen] = useState<string | null>(null);
   const clearRecipe = useCallback(() => setRecipeToOpen(null), []);
   const press = useRef(0);
+  const { nav } = data.settings;
+  const visibleTabs = TABS.filter((x) => x.id === 'today' || (!nav.hidden.includes(x.id) && !(x.id === 'rewards' && nav.rewardsInTasks)));
+  // If the current tab was hidden, go home (Rewards moves inside Tasks).
+  useEffect(() => {
+    if (tab === 'settings' || visibleTabs.some((x) => x.id === tab)) return;
+    setTab(tab === 'rewards' && nav.rewardsInTasks ? 'chores' : 'today');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, nav.hidden.join(','), nav.rewardsInTasks]);
   useTheme(data.settings.theme, data.settings.palette);
 
   useEffect(() => {
@@ -175,7 +175,7 @@ function Shell() {
         >
           🏡
         </div>
-        {TABS.map(({ id, label, Icon }) => (
+        {visibleTabs.map(({ id, label, Icon }) => (
           <button key={id} className={`rail-btn ${tab === id ? 'on' : ''}`} onClick={() => setTab(id)}>
             <Icon size={26} />
             <span>{t(label)}</span>
@@ -189,10 +189,10 @@ function Shell() {
           </button>
         ) : (
           <>
-            <button className="rail-btn full" onClick={enterFullscreen} title="Fullscreen">
+            {nav.showFull && <button className="rail-btn full" onClick={enterFullscreen} title="Fullscreen">
               <Maximize size={22} />
               <span>{t('Full')}</span>
-            </button>
+            </button>}
             <button className={`rail-btn ${tab === 'settings' ? 'on' : ''}`} onClick={() => setTab('settings')}>
               <Gear size={26} />
               <span>{t('Settings')}</span>
@@ -207,6 +207,7 @@ function Shell() {
           {tab === 'today' && <TodayView />}
           {tab === 'calendar' && <CalendarView />}
           {tab === 'chores' && <ChoresView />}
+          {tab === 'rewards' && <RewardsView />}
           {tab === 'lists' && <ListsView />}
           {tab === 'meals' && <MealsView />}
           {tab === 'photos' && <PhotosView onSlideshow={() => setIdle(true)} />}
@@ -221,6 +222,8 @@ function Shell() {
       <Reminders />
       <TimerAlarm />
       <Toaster />
+      <SleepOverlay />
+      <Doorbell />
     </div>
   );
 }
@@ -238,7 +241,9 @@ export default function App() {
         <HaProvider>
           <WeatherProvider>
             <MusicProvider>
-              <LanguageGate />
+              <PresenceProvider>
+                <LanguageGate />
+              </PresenceProvider>
             </MusicProvider>
           </WeatherProvider>
         </HaProvider>

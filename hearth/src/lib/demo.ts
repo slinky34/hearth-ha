@@ -45,7 +45,15 @@ export function demoData(): Partial<StoreData> {
     meals[dateKey(addDays(ws, i))] = { dinner, ...(i === 6 ? { breakfast: 'Pancakes' } : {}) };
   });
 
-  return { members, chores, completions, meals };
+  const rewards = [
+    { id: 'r1', title: 'Pick the movie', emoji: '🎬', cost: 10 },
+    { id: 'r2', title: '30 min screen time', emoji: '📱', cost: 15 },
+    { id: 'r3', title: 'Choose dinner', emoji: '🍕', cost: 20 },
+    { id: 'r4', title: 'Stay up 30 min late', emoji: '🌙', cost: 30 },
+    { id: 'r5', title: 'Ice cream trip', emoji: '🍦', cost: 40 },
+  ];
+  members[2].birthday = dateKey(addDays(today, 12));
+  return { members, chores, completions, meals, rewards };
 }
 
 export function demoSettings() {
