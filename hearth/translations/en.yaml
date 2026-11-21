@@ -26,3 +26,8 @@ configuration:
   immich_api_key:
     name: Immich API key
     description: Create one in Immich under Account settings → API keys.
+  frigate_url:
+    name: Frigate address (optional)
+    description: >-
+      For the recent-detections feed. Use Frigate's internal port, e.g. http://ccab4aaf-frigate:5000
+      for the Frigate add-on, or http://192.168.1.20:5000. Live camera views work without this.

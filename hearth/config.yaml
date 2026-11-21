@@ -1,5 +1,5 @@
 name: Hearth
-version: "0.12.0"
+version: "0.13.0"
 slug: hearth
 image: ghcr.io/slinky34/hearth-{arch}
 description: Family wall calendar, chores, lists, meal plan, and photo frame for wall-mounted tablets
@@ -30,6 +30,7 @@ options:
   bar_assistant_bar_id: ""
   immich_url: ""
   immich_api_key: ""
+  frigate_url: ""
 schema:
   photo_directory: str
   mealie_url: str?
@@ -38,3 +39,4 @@ schema:
   bar_assistant_bar_id: str?
   immich_url: str?
   immich_api_key: password?
+  frigate_url: str?

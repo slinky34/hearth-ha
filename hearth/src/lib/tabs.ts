@@ -1,4 +1,4 @@
-import { BookOpen, CalendarDays, Gift, House, Image, LayoutGrid, ListChecks, Music, Sparkles, UtensilsCrossed } from 'lucide-react';
+import { BookOpen, CalendarDays, Gift, House, Image, LayoutGrid, ListChecks, Music, Video, Sparkles, UtensilsCrossed } from 'lucide-react';
 
 /** Sidebar screens, in order. */
 export const TABS = [
@@ -11,5 +11,6 @@ export const TABS = [
   { id: 'recipes', label: 'Recipes', Icon: BookOpen },
   { id: 'photos', label: 'Photos', Icon: Image },
   { id: 'music', label: 'Music', Icon: Music },
+  { id: 'cameras', label: 'Cameras', Icon: Video },
   { id: 'home', label: 'Home', Icon: House },
 ] as const;

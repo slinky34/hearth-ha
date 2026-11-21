@@ -25,6 +25,7 @@ import { MealsView } from './views/MealsView';
 import { MusicView } from './views/MusicView';
 import { RecipesView } from './views/RecipesView';
 import { RewardsView } from './views/RewardsView';
+import { CamerasView } from './views/CamerasView';
 import { PhotosView } from './views/PhotosView';
 import { Screensaver } from './views/Screensaver';
 import { SettingsView } from './views/SettingsView';
@@ -213,6 +214,7 @@ function Shell() {
           {tab === 'photos' && <PhotosView onSlideshow={() => setIdle(true)} />}
           {tab === 'recipes' && <RecipesView openSlug={recipeToOpen} onOpened={clearRecipe} />}
           {tab === 'music' && <MusicView />}
+          {tab === 'cameras' && <CamerasView />}
           {tab === 'home' && <HomeView />}
           {tab === 'settings' && !kiosk && <SettingsView />}
         </div>

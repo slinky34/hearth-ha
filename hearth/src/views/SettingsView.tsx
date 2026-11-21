@@ -462,6 +462,33 @@ export function SettingsView() {
         </div>
       </Section>
 
+      <Section id="cameras" title={t('Cameras')} summary={settings.cameras.list.length ? t('{n} chosen', { n: settings.cameras.list.length }) : undefined}>
+        <EntityPicker
+          entities={cameras}
+          selected={settings.cameras.list}
+          onChange={(v) => s('cameras', { ...settings.cameras, list: v })}
+          placeholder={t('Search cameras…')}
+          emptyHint={cameras.length ? t('No cameras chosen yet.') : t('No cameras found in Home Assistant.')}
+        />
+        <label className="row check-row">
+          <input type="checkbox" checked={settings.cameras.detections} onChange={(e) => s('cameras', { ...settings.cameras, detections: e.target.checked })} />
+          {t('Show recent Frigate detections')}
+        </label>
+        {settings.cameras.detections && (
+          <div className="chips">
+            {['person', 'car', 'package', 'dog', 'cat', 'bicycle'].map((l) => {
+              const on = settings.cameras.labels.includes(l);
+              return (
+                <button key={l} className={`chip small ${on ? 'on' : ''}`} onClick={() => s('cameras', { ...settings.cameras, labels: on ? settings.cameras.labels.filter((x) => x !== l) : [...settings.cameras.labels, l] })}>
+                  {t(l.charAt(0).toUpperCase() + l.slice(1))}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <p className="muted small">{t('Detections need the Frigate address on the Hearth add-on’s Configuration tab (its internal port, e.g. http://ccab4aaf-frigate:5000). For the doorbell pop-up, a Frigate “person occupancy” sensor works as the trigger.')}</p>
+      </Section>
+
       <Section id="doorbell" title={t('Doorbell')} summary={settings.doorbell.trigger ? undefined : t('Off')}>
         <p className="muted small">{t('When the doorbell rings, show the camera on screen.')}</p>
         <div className="settings-grid">

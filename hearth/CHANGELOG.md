@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.0
+- **Cameras screen:** live snapshots from any Home Assistant cameras (Frigate, UniFi Protect, Reolink, and others). Tap a camera for full-screen live video.
+- **Frigate detections:** a feed of recent person, car, package, and animal detections with thumbnails. Set the new **frigate_url** add-on option (for example `http://ccab4aaf-frigate:5000`).
+- Frigate in Settings → Integrations.
+- Frigate "person occupancy" sensors can trigger the doorbell pop-up.
+- The sidebar fits better with many screens.
+
 ## 0.12.0
 - **Faster updates:** Hearth now ships as ready-made images, so updating takes seconds instead of rebuilding on your HA box.
 - **Rewards:** a reward shop where kids spend the stars they earn. Grown-ups approve requests (with the kiosk PIN if you've set one), and a request can also notify your phones.

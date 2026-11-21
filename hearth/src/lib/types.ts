@@ -110,6 +110,8 @@ export interface Settings {
   leaveBy: { enabled: boolean; region: string; buffer: number };
   /** Ask for the kiosk PIN before approving rewards. */
   rewardPin: boolean;
+  /** Cameras screen: which cameras, and the Frigate detections feed. */
+  cameras: { list: string[]; detections: boolean; labels: string[] };
   /** Sidebar: hidden tabs, and Rewards shown inside Tasks instead of its own tab. */
   nav: { hidden: string[]; rewardsInTasks: boolean; showFull: boolean };
 }

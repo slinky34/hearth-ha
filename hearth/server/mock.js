@@ -157,6 +157,9 @@ export function createMockHA() {
       ...Object.keys(players).map(playerState),
       ...Object.entries(toggles).map(([id, v]) => ts(id, v, id.startsWith('light.') && v[1] === 'on' ? { brightness: 200 } : {})),
       ts('camera.front_door', ['Front Door Camera', 'idle']),
+      ts('camera.driveway', ['Driveway', 'idle']),
+      ts('camera.backyard', ['Backyard', 'idle']),
+      ts('binary_sensor.front_door_person_occupancy', ['Front Door Person occupancy', 'off'], { device_class: 'occupancy' }),
       ts('binary_sensor.doorbell', ['Doorbell', doorbell]),
       ts('tts.google_translate_en_com', ['Google Translate en com', 'unknown']),
       ts('switch.kitchen_tablet_screen', ['Kitchen Tablet Screen', 'on']),
@@ -245,9 +248,25 @@ export function createMockHA() {
       doorbell = 'on';
       setTimeout(() => (doorbell = 'off'), 4000);
     },
-    cameraSnapshot() {
+    cameraSnapshot(id = 'camera.front_door') {
       const t = new Date().toLocaleTimeString();
-      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720"><rect width="1280" height="720" fill="#2b3340"/><rect x="460" y="140" width="360" height="520" rx="12" fill="#6b4a33"/><circle cx="780" cy="400" r="12" fill="#e3b92f"/><text x="40" y="60" font-family="monospace" font-size="34" fill="#fff">FRONT DOOR  ${t}</text></svg>`;
+      const name = String(id).replace('camera.', '').replace(/_/g, ' ').toUpperCase();
+      const scene = id === 'camera.driveway'
+        ? '<rect x="0" y="420" width="1280" height="300" fill="#555b66"/><rect x="420" y="330" width="420" height="160" rx="40" fill="#5B8DEF"/><circle cx="500" cy="500" r="40" fill="#222"/><circle cx="760" cy="500" r="40" fill="#222"/>'
+        : id === 'camera.backyard'
+          ? '<rect x="0" y="380" width="1280" height="340" fill="#4f8a3f"/><circle cx="1050" cy="150" r="70" fill="#E3B92F"/><rect x="200" y="250" width="30" height="180" fill="#6b4a33"/><circle cx="215" cy="230" r="90" fill="#3f7a32"/>'
+          : '<rect x="460" y="140" width="360" height="520" rx="12" fill="#6b4a33"/><circle cx="780" cy="400" r="12" fill="#e3b92f"/>';
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720"><rect width="1280" height="720" fill="#2b3340"/>${scene}<text x="40" y="60" font-family="monospace" font-size="34" fill="#fff">${name}  ${t}</text></svg>`;
+    },
+    frigateEvents(labels) {
+      const now = Date.now() / 1000;
+      const all = [
+        ['front_door', 'person', 120, 0.91], ['driveway', 'car', 600, 0.88], ['front_door', 'package', 1500, 0.79],
+        ['backyard', 'dog', 2400, 0.84], ['driveway', 'person', 4000, 0.93], ['backyard', 'cat', 7200, 0.77],
+      ];
+      return all
+        .filter(([, l]) => !labels.length || labels.includes(l))
+        .map(([camera, label, ago, score], i) => ({ id: `${Math.floor(now - ago)}.0-mock${i}`, camera, label, start: now - ago, end: now - ago + 20, score }));
     },
     immichAlbums() {
       return [

@@ -15,7 +15,7 @@ const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.12.0';
+const VERSION = process.env.HEARTH_VERSION || '0.13.0';
 
 // Add-on options (set on the add-on's Configuration tab in Home Assistant).
 let options = {};
@@ -43,6 +43,8 @@ const IMMICH = {
   url: String(process.env.IMMICH_URL || options.immich_url || '').trim().replace(/\/+$/, '').replace(/\/api$/, ''),
   key: String(process.env.IMMICH_API_KEY || options.immich_api_key || '').trim(),
 };
+// Optional: Frigate NVR API (unauthenticated port, e.g. http://ccab4aaf-frigate:5000 for the HA add-on).
+const FRIGATE_URL = String(process.env.FRIGATE_URL || options.frigate_url || '').trim().replace(/\/+$/, '').replace(/\/api$/, '');
 const BAR = {
   url: String(process.env.BAR_ASSISTANT_URL || options.bar_assistant_url || '').trim().replace(/\/+$/, ''),
   token: String(process.env.BAR_ASSISTANT_TOKEN || options.bar_assistant_token || '').trim(),
@@ -424,10 +426,50 @@ async function route(req, res) {
     return send(res, 200, { media_id: `media-source://media_source/local/hearth-import/${file}` });
   }
 
+  // --- Live camera (MJPEG) through HA's camera_proxy_stream ---
+  match = p.match(/^\/api\/ha\/camera_stream\/(camera\.[a-z0-9_]+)$/);
+  if (match && m === 'GET') {
+    if (mock) return send(res, 200, mock.cameraSnapshot(match[1]), { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store' });
+    const ctrl = new AbortController();
+    req.on('close', () => ctrl.abort());
+    const r = await fetch(`${haBase}/camera_proxy_stream/${match[1]}`, { headers: { Authorization: `Bearer ${haToken}` }, signal: ctrl.signal });
+    if (!r.ok || !r.body) return send(res, r.status || 502, 'Stream unavailable');
+    res.writeHead(200, { 'Content-Type': r.headers.get('content-type') || 'multipart/x-mixed-replace', 'Cache-Control': 'no-store' });
+    try {
+      for await (const chunk of r.body) res.write(chunk);
+    } catch {
+      /* viewer closed */
+    }
+    return res.end();
+  }
+
+  // --- Frigate ---
+  if (p === '/api/frigate/status' && m === 'GET') return send(res, 200, await frigateStatus());
+  if (p === '/api/frigate/events' && m === 'GET') {
+    const labels = (url.searchParams.get('labels') || '').split(',').filter((x) => /^[a-z_]+$/.test(x));
+    const cameras = (url.searchParams.get('cameras') || '').split(',').filter((x) => /^[\w-]+$/.test(x));
+    if (!FRIGATE_URL) return mock ? send(res, 200, mock.frigateEvents(labels)) : send(res, 404, { error: 'Frigate is not set up' });
+    const q = new URLSearchParams({ limit: '24', has_snapshot: '1', include_thumbnails: '0' });
+    if (labels.length) q.set('labels', labels.join(','));
+    if (cameras.length) q.set('cameras', cameras.join(','));
+    const r = await fetch(`${FRIGATE_URL}/api/events?${q}`, { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) return send(res, 502, { error: `Frigate: ${r.status}` });
+    const list = await r.json();
+    return send(res, 200, list.map((e) => ({ id: e.id, camera: e.camera, label: e.label, sub_label: Array.isArray(e.sub_label) ? e.sub_label[0] : e.sub_label, start: e.start_time, end: e.end_time, score: e.top_score ?? e.data?.top_score ?? e.score })));
+  }
+  match = p.match(/^\/api\/frigate\/(thumbnail|snapshot)\/([\w.-]{5,80})$/);
+  if (match && m === 'GET') {
+    if (!FRIGATE_URL) return mock ? send(res, 200, mock.cameraSnapshot('event'), { 'Content-Type': 'image/svg+xml' }) : send(res, 404, 'Not set up');
+    const path_ = match[1] === 'thumbnail' ? `thumbnail.jpg` : `snapshot.jpg?bbox=1`;
+    const r = await fetch(`${FRIGATE_URL}/api/events/${match[2]}/${path_}`, { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) return send(res, r.status, 'Unavailable');
+    return send(res, 200, Buffer.from(await r.arrayBuffer()), { 'Content-Type': 'image/jpeg', 'Cache-Control': 'max-age=86400' });
+  }
+
   // --- Doorbell / camera snapshot ---
   match = p.match(/^\/api\/ha\/camera\/(camera\.[a-z0-9_]+)$/);
   if (match && m === 'GET') {
-    if (mock) return send(res, 200, mock.cameraSnapshot(), { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store' });
+    if (mock) return send(res, 200, mock.cameraSnapshot(match[1]), { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store' });
     const r = await fetch(`${haBase}/camera_proxy/${match[1]}`, { headers: { Authorization: `Bearer ${haToken}` }, signal: AbortSignal.timeout(10000) });
     if (!r.ok) return send(res, r.status, 'Camera unavailable');
     return send(res, 200, Buffer.from(await r.arrayBuffer()), { 'Content-Type': r.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'no-store' });
@@ -532,6 +574,7 @@ async function route(req, res) {
       taskmate: domains.has('taskmate') || st.some((x) => x.entity_id.endsWith('_overview') && Array.isArray(x.attributes?.children)),
       barAssistant: await barStatus(),
       immich: await immichStatus(),
+      frigate: await frigateStatus(),
       mealieImages: Boolean(MEALIE_URL) || Boolean(mock),
     });
   }
@@ -662,6 +705,19 @@ const server = http.createServer((req, res) => {
 
 
 let homeLoc = null;
+
+// ---------- Frigate ----------
+async function frigateStatus() {
+  if (!FRIGATE_URL) return mock ? { configured: true, ok: true } : { configured: false, ok: false };
+  try {
+    const r = await fetch(`${FRIGATE_URL}/api/version`, { signal: AbortSignal.timeout(6000) });
+    if (r.status === 401) return { configured: true, ok: false, error: 'Frigate asked for a login. Use its internal port (5000), e.g. http://ccab4aaf-frigate:5000.' };
+    if (!r.ok) return { configured: true, ok: false, error: `Frigate answered ${r.status}. Check the address.` };
+    return { configured: true, ok: true, version: (await r.text()).trim() };
+  } catch (e) {
+    return { configured: true, ok: false, error: `Can't reach Frigate (${e.cause?.code || e.message}). Check the address.` };
+  }
+}
 
 // ---------- Immich ----------
 async function immich(path_, body) {

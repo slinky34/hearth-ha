@@ -10,6 +10,7 @@ interface Status {
   taskmate: boolean;
   barAssistant: { configured: boolean; ok: boolean; error?: string };
   immich: { configured: boolean; ok: boolean; error?: string };
+  frigate: { configured: boolean; ok: boolean; error?: string };
   mealieImages: boolean;
 }
 
@@ -35,6 +36,7 @@ export function Integrations() {
         { icon: '🍲', name: 'Mealie', on: has('mealie'), detail: st.mealieImages ? t('Recipes and photos') : t('Recipes (set mealie_url for photos)'), how: t('Add the Mealie integration in Home Assistant.') },
         { icon: '🍸', name: 'Bar Assistant', on: st.barAssistant.ok, detail: t('Cocktail recipes'), how: st.barAssistant.configured && st.barAssistant.error ? st.barAssistant.error : t('Set the Bar Assistant address and token on the Hearth add-on’s Configuration tab.'), problem: st.barAssistant.configured && !st.barAssistant.ok },
         { icon: '🖼️', name: 'Immich', on: st.immich.ok, detail: t('Photos for the frame and screensaver'), how: st.immich.configured && st.immich.error ? st.immich.error : t('Set the Immich address and API key on the Hearth add-on’s Configuration tab.'), problem: st.immich.configured && !st.immich.ok },
+        { icon: '📹', name: 'Frigate', on: st.frigate.ok || has('frigate'), detail: st.frigate.ok ? t('Cameras and detections') : t('Cameras (set frigate_url for detections)'), how: st.frigate.configured && st.frigate.error ? st.frigate.error : t('Install Frigate and its Home Assistant integration, then set the Frigate address on the Hearth add-on’s Configuration tab.'), problem: st.frigate.configured && !st.frigate.ok },
         { icon: '🥫', name: 'Grocy', on: st.grocy, detail: t('Shopping, chores, expiring food, meal plan'), how: t('Install the Grocy custom integration (HACS) in Home Assistant.') },
         { icon: '⭐', name: 'TaskMate', on: st.taskmate, detail: t('Link kids’ chore lists under Family'), how: t('Install the TaskMate custom integration (HACS) in Home Assistant.') },
         { icon: '🛒', name: 'AnyList', on: has('anylist'), detail: t('Shows under Lists'), how: t('Install the AnyList custom integration (HACS); its lists appear as to-do lists.') },

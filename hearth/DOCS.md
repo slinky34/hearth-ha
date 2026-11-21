@@ -39,3 +39,15 @@ Magic Import needs an AI provider in Home Assistant (for example OpenAI, Google 
 ## Leave-by times
 
 Add the **Waze Travel Time** integration in Home Assistant (any route), then turn on **Settings → Calendar → Leave-by times**.
+
+## Cameras and Frigate
+
+Pick cameras under **Settings → Cameras**; any Home Assistant camera works. For Frigate's recent-detections feed, set **Frigate address** on the Configuration tab to Frigate's internal port: `http://ccab4aaf-frigate:5000` for the Frigate add-on (`http://ccab4aaf-frigate-fa:5000` for Frigate Full Access), or `http://<frigate-ip>:5000`.
+
+## Phone app
+
+1. On the add-on's **Configuration** tab, set a host port for `8099/tcp` (for example 8099) and restart.
+2. On your phone, on home Wi-Fi, open `http://<your-HA-IP>:8099`.
+3. iPhone: Share → **Add to Home Screen**. Android: ⋮ → **Add to Home screen**.
+
+Away from home, open Hearth from the Home Assistant Companion app's sidebar, or use a VPN like Tailscale.

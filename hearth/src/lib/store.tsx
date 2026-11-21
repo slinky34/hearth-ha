@@ -36,6 +36,7 @@ export const DEFAULT_SETTINGS: Settings = {
   leaveBy: { enabled: false, region: 'us', buffer: 5 },
   rewardPin: true,
   nav: { hidden: [], rewardsInTasks: false, showFull: true },
+  cameras: { list: [], detections: true, labels: ['person', 'car', 'package'] },
 };
 
 function normalize(raw: Partial<StoreData>): StoreData {
@@ -49,7 +50,8 @@ function normalize(raw: Partial<StoreData>): StoreData {
       doorbell: { ...DEFAULT_SETTINGS.doorbell, ...raw.settings?.doorbell },
       tts: { ...DEFAULT_SETTINGS.tts, ...raw.settings?.tts },
       leaveBy: { ...DEFAULT_SETTINGS.leaveBy, ...raw.settings?.leaveBy },
-      nav: { ...DEFAULT_SETTINGS.nav, ...raw.settings?.nav } },
+      nav: { ...DEFAULT_SETTINGS.nav, ...raw.settings?.nav },
+      cameras: { ...DEFAULT_SETTINGS.cameras, ...raw.settings?.cameras } },
     timers: raw.timers ?? [],
     rewards: raw.rewards ?? [],
     redemptions: raw.redemptions ?? [],
