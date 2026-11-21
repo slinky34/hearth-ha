@@ -1,0 +1,159 @@
+// In-memory stand-in for the Home Assistant REST API, used when Hearth runs
+// without HA (local development / trying it out). Covers only what Hearth calls.
+
+const pad = (n) => String(n).padStart(2, '0');
+const dateKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+function localIso(d) {
+  const off = -d.getTimezoneOffset();
+  const a = Math.abs(off);
+  return `${dateKey(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}:00${off >= 0 ? '+' : '-'}${pad(Math.floor(a / 60))}:${pad(a % 60)}`;
+}
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+
+const CALENDARS = [
+  { entity_id: 'calendar.family', name: 'Family' },
+  { entity_id: 'calendar.jordan', name: 'Jordan' },
+  { entity_id: 'calendar.alex', name: 'Alex' },
+  { entity_id: 'calendar.sam', name: 'Sam' },
+];
+
+// Recurring timed events: by weekday (0 = Sunday) or by day of month.
+const RECURRING = [
+  { cal: 'calendar.family', days: [1, 2, 3, 4, 5], at: [7, 45], mins: 30, summary: 'School drop-off' },
+  { cal: 'calendar.jordan', days: [1, 2, 3, 4, 5], at: [9, 0], mins: 30, summary: 'Team standup' },
+  { cal: 'calendar.sam', days: [1, 3], at: [17, 0], mins: 90, summary: 'Soccer practice', location: 'Riverside Park' },
+  { cal: 'calendar.alex', days: [2], at: [16, 0], mins: 45, summary: 'Piano lesson', location: 'Ms. Rivera’s studio' },
+  { cal: 'calendar.jordan', days: [4], at: [12, 30], mins: 60, summary: 'Lunch with Priya' },
+  { cal: 'calendar.alex', days: [4], at: [15, 30], mins: 60, summary: 'Art club' },
+  { cal: 'calendar.jordan', days: [3], at: [19, 0], mins: 90, summary: 'Book club' },
+  { cal: 'calendar.sam', days: [6], at: [9, 0], mins: 75, summary: 'Soccer game', location: 'Field 3' },
+  { cal: 'calendar.family', days: [6], at: [10, 30], mins: 90, summary: 'Pancake brunch' },
+  { cal: 'calendar.family', days: [0], at: [18, 0], mins: 120, summary: 'Family movie night' },
+  { cal: 'calendar.alex', dates: [6, 19], at: [13, 0], mins: 45, summary: 'Dentist', location: 'Smile Dental' },
+  { cal: 'calendar.jordan', dates: [10, 24], at: [17, 30], mins: 30, summary: 'Pick up dry cleaning' },
+];
+const ALL_DAY = [
+  { cal: 'calendar.family', dates: [11], len: 1, summary: 'No school' },
+  { cal: 'calendar.sam', dates: [8], len: 1, summary: 'Sam’s birthday 🎂' },
+  { cal: 'calendar.family', dates: [22], len: 3, summary: 'Grandma visiting' },
+];
+
+export function createMockHA() {
+  const created = [];
+  let uid = 1;
+  const todos = {
+    'todo.groceries': [
+      ['Milk', 0], ['Eggs', 0], ['Bananas', 0], ['Tortillas', 0], ['Coffee beans', 0], ['Spinach', 1], ['Bread', 1],
+    ],
+    'todo.household': [['Call plumber', 0], ['Return library books', 0], ['Order birthday gift', 0], ['Change air filter', 1]],
+  };
+  for (const k of Object.keys(todos))
+    todos[k] = todos[k].map(([summary, done]) => ({ uid: String(uid++), summary, status: done ? 'completed' : 'needs_action' }));
+
+  function eventsFor(cal, start, end) {
+    const out = [];
+    for (let d = new Date(start.getFullYear(), start.getMonth(), start.getDate()); d < end; d = addDays(d, 1)) {
+      for (const r of RECURRING) {
+        if (r.cal !== cal) continue;
+        if (r.days ? !r.days.includes(d.getDay()) : !r.dates.includes(d.getDate())) continue;
+        const s = new Date(d.getFullYear(), d.getMonth(), d.getDate(), r.at[0], r.at[1]);
+        const e = new Date(s.getTime() + r.mins * 60000);
+        out.push({ uid: `${cal}-${dateKey(d)}-${r.summary}`, summary: r.summary, location: r.location, start: { dateTime: localIso(s) }, end: { dateTime: localIso(e) } });
+      }
+      for (const a of ALL_DAY) {
+        if (a.cal !== cal || !a.dates.includes(d.getDate())) continue;
+        out.push({ uid: `${cal}-${dateKey(d)}-${a.summary}`, summary: a.summary, start: { date: dateKey(d) }, end: { date: dateKey(addDays(d, a.len)) } });
+      }
+    }
+    for (const c of created) {
+      if (c.cal !== cal) continue;
+      const s = new Date(c.start.dateTime || c.start.date + 'T00:00');
+      const e = new Date(c.end.dateTime || c.end.date + 'T00:00');
+      if (s < end && e > start) out.push(c.event);
+    }
+    return out;
+  }
+
+  function forecast() {
+    const conds = ['sunny', 'partlycloudy', 'cloudy', 'rainy', 'partlycloudy', 'sunny', 'snowy'];
+    const today = new Date();
+    return Array.from({ length: 7 }, (_, i) => ({
+      datetime: localIso(addDays(today, i)),
+      condition: conds[(today.getDate() + i) % conds.length],
+      temperature: 52 + ((i * 7) % 11),
+      templow: 38 + ((i * 5) % 8),
+      precipitation_probability: [5, 10, 40, 80, 20, 0, 60][(today.getDate() + i) % 7],
+    }));
+  }
+
+  function states() {
+    return [
+      ...CALENDARS.map((c) => ({ entity_id: c.entity_id, state: 'off', attributes: { friendly_name: c.name } })),
+      { entity_id: 'todo.groceries', state: '5', attributes: { friendly_name: 'Groceries' } },
+      { entity_id: 'todo.household', state: '3', attributes: { friendly_name: 'Household' } },
+      { entity_id: 'weather.home', state: forecast()[0].condition, attributes: { friendly_name: 'Home', temperature: 54, temperature_unit: '°F', humidity: 61 } },
+    ];
+  }
+
+  const ok = (data) => ({ status: 200, data });
+  const ids = (v) => (Array.isArray(v) ? v : [v]);
+
+  return {
+    async handle(method, apiPath, body = {}) {
+      const url = new URL(apiPath, 'http://mock');
+      const p = url.pathname;
+      if (method === 'GET' && p === '/calendars') return ok(CALENDARS);
+      if (method === 'GET' && p.startsWith('/calendars/')) {
+        const cal = p.split('/')[2];
+        if (!CALENDARS.some((c) => c.entity_id === cal)) return { status: 404, data: { message: 'Entity not found' } };
+        return ok(eventsFor(cal, new Date(url.searchParams.get('start')), new Date(url.searchParams.get('end'))));
+      }
+      if (method === 'GET' && p === '/states') return ok(states());
+      if (method === 'GET' && p.startsWith('/states/')) {
+        const s = states().find((x) => x.entity_id === p.split('/')[2]);
+        return s ? ok(s) : { status: 404, data: { message: 'Entity not found' } };
+      }
+      if (method !== 'POST') return { status: 404, data: { message: 'Not found' } };
+
+      const svc = p.replace('/services/', '').replace('/', '.');
+      const entities = ids(body.entity_id || []);
+      switch (svc) {
+        case 'todo.get_items': {
+          const service_response = {};
+          for (const e of entities) service_response[e] = { items: todos[e] || [] };
+          return ok({ changed_states: [], service_response });
+        }
+        case 'todo.add_item':
+          for (const e of entities) (todos[e] ||= []).push({ uid: String(uid++), summary: body.item, status: 'needs_action' });
+          return ok([]);
+        case 'todo.update_item':
+          for (const e of entities) {
+            const it = (todos[e] || []).find((i) => i.uid === body.item || i.summary === body.item);
+            if (it) {
+              if (body.status) it.status = body.status;
+              if (body.rename) it.summary = body.rename;
+            }
+          }
+          return ok([]);
+        case 'todo.remove_item':
+          for (const e of entities) todos[e] = (todos[e] || []).filter((i) => !ids(body.item).some((x) => x === i.uid || x === i.summary));
+          return ok([]);
+        case 'todo.remove_completed_items':
+          for (const e of entities) todos[e] = (todos[e] || []).filter((i) => i.status !== 'completed');
+          return ok([]);
+        case 'weather.get_forecasts':
+          return ok({ changed_states: [], service_response: Object.fromEntries(entities.map((e) => [e, { forecast: forecast() }])) });
+        case 'calendar.create_event':
+          for (const cal of entities) {
+            const start = body.start_date_time ? { dateTime: localIso(new Date(body.start_date_time.replace(' ', 'T'))) } : { date: body.start_date };
+            const end = body.end_date_time ? { dateTime: localIso(new Date(body.end_date_time.replace(' ', 'T'))) } : { date: body.end_date };
+            const event = { uid: `created-${uid++}`, summary: body.summary, description: body.description, location: body.location, start, end };
+            created.push({ cal, start, end, event });
+          }
+          return ok([]);
+        default:
+          return { status: 400, data: { message: `Mock does not implement ${svc}` } };
+      }
+    },
+  };
+}

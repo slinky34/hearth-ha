@@ -1,0 +1,98 @@
+import { addDays, addWeeks, format, isToday, startOfWeek } from 'date-fns';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useState } from 'react';
+import { useStore } from '../lib/store';
+import type { MealType } from '../lib/types';
+import { dateKey } from '../lib/util';
+
+const MEALS: { key: MealType; label: string; icon: string }[] = [
+  { key: 'breakfast', label: 'Breakfast', icon: '🥣' },
+  { key: 'lunch', label: 'Lunch', icon: '🥪' },
+  { key: 'dinner', label: 'Dinner', icon: '🍽️' },
+];
+
+export function MealsView() {
+  const { data, set } = useStore();
+  const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: data.settings.weekStartsOn }));
+  const [editing, setEditing] = useState<string | null>(null); // `${dateKey}|${meal}`
+  const [draft, setDraft] = useState('');
+  const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+
+  const begin = (k: string, meal: MealType) => {
+    setEditing(`${k}|${meal}`);
+    setDraft(data.meals[k]?.[meal] ?? '');
+  };
+  const commit = () => {
+    if (!editing) return;
+    const [k, meal] = editing.split('|') as [string, MealType];
+    const value = draft.trim();
+    set('meals', (prev) => {
+      const day = { ...prev[k] };
+      if (value) day[meal] = value;
+      else delete day[meal];
+      const next = { ...prev, [k]: day };
+      if (!Object.keys(day).length) delete next[k];
+      return next;
+    });
+    setEditing(null);
+  };
+
+  return (
+    <div className="meals">
+      <div className="view-head">
+        <div className="nav-group">
+          <button className="icon-btn" onClick={() => setWeekStart((w) => addWeeks(w, -1))} aria-label="Previous week">
+            <ChevronLeft />
+          </button>
+          <button className="icon-btn" onClick={() => setWeekStart((w) => addWeeks(w, 1))} aria-label="Next week">
+            <ChevronRight />
+          </button>
+          <h1>Meals · {format(weekStart, 'MMM d')}</h1>
+        </div>
+      </div>
+      <div className="meal-grid">
+        <div />
+        {days.map((d) => (
+          <div key={d.toISOString()} className={`meal-day ${isToday(d) ? 'today' : ''}`}>
+            <span className="dow">{format(d, 'EEE')}</span>
+            <span className="dnum">{format(d, 'd')}</span>
+          </div>
+        ))}
+        {MEALS.map((m) => (
+          <div key={m.key} className="meal-row">
+            <div className="meal-label">
+              <span>{m.icon}</span>
+              {m.label}
+            </div>
+            {days.map((d) => {
+              const k = dateKey(d);
+              const id = `${k}|${m.key}`;
+              const value = data.meals[k]?.[m.key];
+              return editing === id ? (
+                <textarea
+                  key={id}
+                  className="meal-cell editing"
+                  autoFocus
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onBlur={commit}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      commit();
+                    }
+                    if (e.key === 'Escape') setEditing(null);
+                  }}
+                />
+              ) : (
+                <button key={id} className={`meal-cell ${value ? 'filled' : ''} ${m.key}`} onClick={() => begin(k, m.key)}>
+                  {value ?? <span className="plus">+</span>}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

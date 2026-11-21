@@ -1,0 +1,33 @@
+import { useEffect, useState } from 'react';
+
+/** Current time, re-rendering every `ms` milliseconds. */
+export function useNow(ms = 10000) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), ms);
+    return () => clearInterval(t);
+  }, [ms]);
+  return now;
+}
+
+/** True once there has been no touch, click, or key press for `minutes`. 0 disables. */
+export function useIdle(minutes: number) {
+  const [idle, setIdle] = useState(false);
+  useEffect(() => {
+    if (!minutes) return;
+    let last = Date.now();
+    const poke = () => {
+      last = Date.now();
+    };
+    const events = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
+    events.forEach((e) => window.addEventListener(e, poke, { passive: true }));
+    const t = setInterval(() => {
+      if (Date.now() - last > minutes * 60000) setIdle(true);
+    }, 5000);
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, poke));
+      clearInterval(t);
+    };
+  }, [minutes]);
+  return [idle, setIdle] as const;
+}

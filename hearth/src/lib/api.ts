@@ -1,0 +1,78 @@
+import { parseISO } from 'date-fns';
+import type { CalEvent, CalendarInfo, EntityInfo, Mode, StoreData, TodoItem } from './types';
+
+// All URLs are relative so the app works under Home Assistant ingress paths.
+async function j<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
+  const text = await res.text();
+  const body = text ? JSON.parse(text) : null;
+  if (!res.ok) throw new Error(body?.message || body?.error || `${res.status} ${res.statusText}`);
+  return body as T;
+}
+
+const post = (body: unknown): RequestInit => ({
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+});
+
+interface HaEvent {
+  uid?: string;
+  recurrence_id?: string;
+  summary?: string;
+  description?: string;
+  location?: string;
+  start: { date?: string; dateTime?: string };
+  end: { date?: string; dateTime?: string };
+}
+
+function toEvent(e: HaEvent, calendar: string): CalEvent {
+  const allDay = !e.start.dateTime;
+  const start = allDay ? parseISO(e.start.date!) : new Date(e.start.dateTime!);
+  const end = allDay ? parseISO(e.end.date!) : new Date(e.end.dateTime!);
+  return {
+    id: `${calendar}|${e.uid ?? e.summary}|${e.recurrence_id ?? ''}|${start.getTime()}`,
+    title: e.summary || '(No title)',
+    start,
+    end: end > start ? end : new Date(start.getTime() + (allDay ? 86400000 : 0)),
+    allDay,
+    calendar,
+    location: e.location || undefined,
+    description: e.description || undefined,
+  };
+}
+
+export const api = {
+  status: () => j<{ mode: Mode; version: string }>('api/status'),
+
+  calendars: () => j<CalendarInfo[]>('api/ha/calendars'),
+  entities: () => j<EntityInfo[]>('api/ha/entities'),
+  state: (entity: string) => j<{ state: string; attributes: Record<string, any> }>(`api/ha/states/${entity}`),
+
+  async events(calendar: string, start: Date, end: Date): Promise<CalEvent[]> {
+    const q = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
+    const list = await j<HaEvent[]>(`api/ha/calendars/${calendar}?${q}`);
+    return list.map((e) => toEvent(e, calendar));
+  },
+
+  service<T = unknown>(domain: string, service: string, data: object, returnResponse = false) {
+    return j<T>(`api/ha/services/${domain}/${service}${returnResponse ? '?return_response' : ''}`, post(data));
+  },
+
+  async todoItems(entity: string): Promise<TodoItem[]> {
+    const r = await api.service<{ service_response: Record<string, { items: TodoItem[] }> }>(
+      'todo', 'get_items', { entity_id: entity }, true,
+    );
+    return r.service_response?.[entity]?.items ?? [];
+  },
+
+  store: () => j<{ rev: number; data: Partial<StoreData> }>('api/store'),
+  putStore: (key: keyof StoreData, value: unknown) =>
+    j<{ rev: number }>(`api/store/${key}`, { ...post({ value }), method: 'PUT' }),
+
+  photos: () => j<string[]>('api/photos'),
+  photoUrl: (name: string) => `photos/${encodeURIComponent(name)}`,
+  uploadPhoto: (file: File) =>
+    j<{ name: string }>(`api/photos?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file }),
+  deletePhoto: (name: string) => j(`api/photos/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+};
