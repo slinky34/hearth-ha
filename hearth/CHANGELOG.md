@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0
+- **Skip back/forward fixed:** when a speaker shows up twice in Home Assistant (its own integration plus Music Assistant), Hearth now treats it as one speaker. Each command (play/pause, skip, volume) goes to whichever of the two supports it, so skip works even if the speaker's own entity can't.
+- **Playlists and albums open a song list** instead of playing right away. Use Play all or Shuffle, or tap a song to play from there.
+- New **Albums** section from your Music Assistant library.
+
 ## 0.5.0
 - **Recipes (Mealie):** a new Recipes screen with your Mealie meal plan and searchable recipes. Each recipe shows its photo, ingredients, and steps.
 - **Cook mode:** follow a recipe step by step in large text, with an ingredient checklist and ½× / 1× / 2× scaling. When a step mentions a time, there's a one-tap timer for it, and the screen stays on while you cook.

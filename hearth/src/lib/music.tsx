@@ -28,7 +28,45 @@ export interface Player {
   features: number;
   /** A Music Assistant player (only these can play MA playlists). */
   mass: boolean;
+  /**
+   * The same physical speaker's other entity (native integration <-> Music Assistant).
+   * Commands this entity doesn't support are sent to the twin.
+   */
+  twin?: Player;
 }
+
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+const stem = (id: string) => id.split('.')[1].replace(/_\d+$/, '');
+const isActiveState = (p: Player) => p.state === 'playing' || p.state === 'paused';
+
+/** Collapse native + Music Assistant entities of one speaker into a single entry. */
+function pairTwins(all: Player[]): Player[] {
+  const mass = all.filter((p) => p.mass);
+  const used = new Set<string>();
+  const out: Player[] = [];
+  for (const p of all.filter((x) => !x.mass)) {
+    const twin = mass.find((m) => !used.has(m.id) && (norm(m.name) === norm(p.name) || stem(m.id) === stem(p.id)));
+    if (!twin) {
+      out.push(p);
+      continue;
+    }
+    used.add(twin.id);
+    // Show whichever is actually playing; prefer the Music Assistant one otherwise.
+    const lead = isActiveState(p) && !isActiveState(twin) ? p : twin;
+    const other = lead === p ? twin : p;
+    out.push({ ...lead, name: p.name, twin: other });
+  }
+  mass.filter((m) => !used.has(m.id)).forEach((m) => out.push(m));
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+const FEATURE_FOR: Record<string, number> = {
+  media_next_track: F.NEXT,
+  media_previous_track: F.PREVIOUS,
+  volume_set: F.VOLUME_SET,
+  media_pause: F.PAUSE,
+  media_play: F.PLAY,
+};
 
 const clean = (v: unknown) => (typeof v === 'string' && v.trim() && !NO_TITLE.test(v.trim()) ? v.trim() : undefined);
 
@@ -53,7 +91,10 @@ function toPlayer(s: HaState): Player {
   };
 }
 
-export const can = (p: Player | null, feature: number) => !!p && (p.features & feature) !== 0;
+export const can = (p: Player | null, feature: number): boolean =>
+  !!p && ((p.features & feature) !== 0 || (!!p.twin && (p.twin.features & feature) !== 0));
+/** The Music Assistant entity for a speaker, if it has one. */
+export const massOf = (p: Player | null) => (p?.mass ? p : p?.twin?.mass ? p.twin : undefined);
 
 interface MusicCtx {
   players: Player[];
@@ -80,7 +121,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         .filter((s) => s.state !== 'unavailable')
         .map(toPlayer)
         .sort((a, b) => a.name.localeCompare(b.name));
-      setPlayers(all.filter((p) => musicPlayers.length === 0 || musicPlayers.includes(p.id)));
+      setPlayers(
+        pairTwins(all).filter(
+          (p) => musicPlayers.length === 0 || musicPlayers.includes(p.id) || (!!p.twin && musicPlayers.includes(p.twin.id)),
+        ),
+      );
       setMass(all.filter((p) => p.mass));
     } catch {
       /* HA unreachable; keep last known */
@@ -95,7 +140,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
   const active = useMemo(
     () =>
-      players.find((p) => p.id === chosen) ??
+      players.find((p) => p.id === chosen || p.twin?.id === chosen) ??
       players.find((p) => p.state === 'playing') ??
       players.find((p) => p.state === 'paused') ??
       players[0] ??
@@ -108,15 +153,22 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       const id = player ?? active?.id;
       if (!id) return false;
       let [domain, svc] = service.includes('.') ? service.split('.') : ['media_player', service];
-      const p = players.find((x) => x.id === id);
+      const p = players.find((x) => x.id === id || x.twin?.id === id);
       // Prefer explicit play/pause: some players support those but not the toggle.
       if (svc === 'media_play_pause' && p) svc = p.state === 'playing' ? 'media_pause' : 'media_play';
+      // Send to whichever entity of the speaker supports this command.
+      let target = id;
+      const need = domain === 'media_player' ? FEATURE_FOR[svc] : undefined;
+      if (p && need) {
+        if ((p.features & need) !== 0) target = p.id;
+        else if (p.twin && (p.twin.features & need) !== 0) target = p.twin.id;
+      }
       const prev = players;
       if (svc === 'media_pause' || svc === 'media_play')
         setPlayers((ps) => ps.map((x) => (x.id === id ? { ...x, state: svc === 'media_pause' ? 'paused' : 'playing' } : x)));
       if (svc === 'volume_set') setPlayers((ps) => ps.map((x) => (x.id === id ? { ...x, volume: Number(data.volume_level) } : x)));
       try {
-        await api.service(domain, svc, { entity_id: id, ...data });
+        await api.service(domain, svc, { entity_id: target, ...data });
         setTimeout(load, 700);
         return true;
       } catch (e) {

@@ -96,6 +96,9 @@ export function createMockHA() {
     'media_player.kitchen': { name: 'Kitchen Speaker', state: 'playing', track: 0, volume: 0.35, started: Date.now() },
     'media_player.living_room': { name: 'Living Room', state: 'paused', track: 2, volume: 0.5, started: Date.now() },
   };
+  // Like a real setup: the speaker's native entity can't skip; its Music Assistant twin can.
+  players['media_player.kitchen_2'] = players['media_player.kitchen'];
+  const MASS = new Set(['media_player.living_room', 'media_player.kitchen_2']);
   const toggles = {
     'light.kitchen': ['Kitchen Lights', 'on'],
     'light.living_room': ['Living Room Lamp', 'off'],
@@ -134,8 +137,8 @@ export function createMockHA() {
         volume_level: p.volume,
         is_volume_muted: false,
         entity_picture: `/api/media_player_proxy/${id}`,
-        supported_features: 0xffff,
-        ...(id === 'media_player.living_room' ? { mass_player_type: 'player', active_queue: 'living_room' } : {}),
+        supported_features: id === 'media_player.kitchen' ? 1 | 4 | 16384 : 0xffff,
+        ...(MASS.has(id) ? { mass_player_type: 'player', active_queue: id } : {}),
       },
     };
   }
@@ -202,6 +205,9 @@ export function createMockHA() {
       instructions: [step('Mix the beef, breadcrumbs, and egg. Roll into 18 meatballs.'), step('Bake at 400°F for 20 minutes.'), step('Simmer the meatballs in the marinara for 10 minutes.'), step('Boil the spaghetti for 9 minutes, drain, and serve topped with meatballs.')],
     },
   ];
+  const ALBUMS = [['Abbey Road', 'The Beatles'], ['Rumours', 'Fleetwood Mac'], ['Thriller', 'Michael Jackson'], ['Kind of Blue', 'Miles Davis'], ['Tapestry', 'Carole King'], ['Moana (Soundtrack)', 'Various Artists']];
+  const SONGS = ['Here Comes the Sun', 'Lovely Day', 'September', 'Dreams', 'Superstition', 'Dancing Queen', 'Walking on Sunshine', 'Three Little Birds', 'Happy', 'Shake It Off', 'Mr. Blue Sky', 'Good Vibrations'];
+  const ARTISTS = ['The Beatles', 'Bill Withers', 'Earth, Wind & Fire', 'Fleetwood Mac', 'Stevie Wonder', 'ABBA', 'Katrina & The Waves', 'Bob Marley', 'Pharrell Williams', 'Taylor Swift', 'ELO', 'The Beach Boys'];
   const strip = (r) => { const { color, emoji, ...rest } = r; return rest; };
   const base = (r) => ({ recipe_id: r.recipe_id, slug: r.slug, name: r.name, description: r.description, image: 'img', recipe_yield: r.recipe_yield, total_time: r.total_time });
   const mealplan = () => {
@@ -212,6 +218,24 @@ export function createMockHA() {
   };
 
   return {
+    ws(type, payload) {
+      if (type !== 'media_player/browse_media') return Promise.reject(new Error(`Mock ws: ${type}`));
+      const id = String(payload.media_content_id || '');
+      const m = id.match(/^library:\/\/(playlist|album)\/(\d+)$/);
+      if (!m) return Promise.reject(new Error('Unknown media id'));
+      const n = Number(m[2]);
+      const count = m[1] === 'album' ? 9 : 12;
+      const title = m[1] === 'album' ? ALBUMS[n - 1]?.[0] : ['Family Favorites', 'Dinner Jazz', 'Kids Dance Party', 'Sunday Morning', 'Road Trip', 'Bedtime'][n - 1];
+      const children = Array.from({ length: count }, (_, i) => {
+        const k = (i + n * 3) % SONGS.length;
+        return {
+          title: SONGS[k], media_class: 'track', media_content_type: 'track', media_content_id: `library://track/${n * 100 + i}`,
+          can_play: true, can_expand: false, thumbnail: null,
+          ...(m[1] === 'album' ? {} : { title: `${SONGS[k]} - ${ARTISTS[k]}` }),
+        };
+      });
+      return Promise.resolve({ title, media_class: m[1], media_content_type: m[1], media_content_id: id, can_play: true, can_expand: true, thumbnail: null, children });
+    },
     recipeArt(id) {
       const r = RECIPES.find((x) => x.recipe_id === id) ?? RECIPES[0];
       return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${r.color}"/><stop offset="1" stop-color="#fff4e6"/></linearGradient></defs><rect width="400" height="300" fill="url(#g)"/><text x="200" y="185" font-size="120" text-anchor="middle">${r.emoji}</text></svg>`;
@@ -296,6 +320,8 @@ export function createMockHA() {
           return ok([]);
         case 'media_player.media_next_track':
         case 'media_player.media_previous_track':
+          if (entities.includes('media_player.kitchen'))
+            return { status: 400, data: { message: 'Entity media_player.kitchen does not support this service.' } };
           for (const e of entities) {
             const pl = players[e];
             if (!pl) continue;
@@ -307,6 +333,8 @@ export function createMockHA() {
           for (const e of entities) if (players[e]) players[e].volume = Number(body.volume_level);
           return ok([]);
         case 'music_assistant.get_library':
+          if (body.media_type === 'album')
+            return ok({ changed_states: [], service_response: { items: ALBUMS.map((a, i) => ({ name: a[0], uri: `library://album/${i + 1}`, media_type: 'album', image: null, artists: [{ name: a[1] }] })) } });
           return ok({
             changed_states: [],
             service_response: {
@@ -319,7 +347,7 @@ export function createMockHA() {
             },
           });
         case 'music_assistant.play_media':
-          if (entities.some((e) => e !== 'media_player.living_room'))
+          if (entities.some((e) => !MASS.has(e)))
             return { status: 400, data: { message: `Entity ${entities[0]} is not a Music Assistant player` } };
           for (const e of entities) if (players[e]) Object.assign(players[e], { state: 'playing', track: (players[e].track + 1) % TRACKS.length, started: Date.now() });
           return ok([]);

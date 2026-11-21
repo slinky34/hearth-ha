@@ -418,4 +418,12 @@ export const DICT: Record<string, string[]> = {
   "Playing": ["Wird abgespielt", "Reproduciendo", "En lecture", "In riproduzione", "再生中", "재생 중", "Speelt", "Tocando"],
   "Paused": ["Pausiert", "En pausa", "En pause", "In pausa", "一時停止中", "일시정지됨", "Gepauzeerd", "Pausado"],
   "{player}: {error}": ["{player}: {error}", "{player}: {error}", "{player} : {error}", "{player}: {error}", "{player}: {error}", "{player}: {error}", "{player}: {error}", "{player}: {error}"],
+  "Albums": ["Alben", "Álbumes", "Albums", "Album", "アルバム", "앨범", "Albums", "Álbuns"],
+  "Album": ["Album", "Álbum", "Album", "Album", "アルバム", "앨범", "Album", "Álbum"],
+  "Playlist": ["Playlist", "Lista", "Playlist", "Playlist", "プレイリスト", "재생목록", "Afspeellijst", "Playlist"],
+  "Play all": ["Alle abspielen", "Reproducir todo", "Tout lire", "Riproduci tutto", "すべて再生", "모두 재생", "Alles afspelen", "Tocar tudo"],
+  "Shuffle": ["Zufall", "Aleatorio", "Aléatoire", "Casuale", "シャッフル", "셔플", "Shuffle", "Aleatório"],
+  "{n} songs": ["{n} Titel", "{n} canciones", "{n} titres", "{n} brani", "{n} 曲", "{n}곡", "{n} nummers", "{n} músicas"],
+  "on {player}": ["auf {player}", "en {player}", "sur {player}", "su {player}", "{player} で再生", "{player}에서", "op {player}", "em {player}"],
+  "Couldn’t load the songs: {error}": ["Titel konnten nicht geladen werden: {error}", "No se pudieron cargar las canciones: {error}", "Impossible de charger les titres : {error}", "Impossibile caricare i brani: {error}", "曲を読み込めませんでした: {error}", "곡을 불러올 수 없습니다: {error}", "Nummers laden mislukt: {error}", "Não foi possível carregar as músicas: {error}"],
 };

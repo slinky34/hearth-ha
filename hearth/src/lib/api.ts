@@ -50,6 +50,12 @@ export const api = {
   notifyTargets: () => j<string[]>('api/ha/notify_targets'),
   notifyTest: (target: string) => j<{ ok: boolean }>('api/notify/test', post({ target })),
   mealieEntry: () => j<{ entry_id: string | null; images: boolean }>('api/ha/mealie'),
+  browse: (entity: string, id: string, type: string) =>
+    j<{ title: string; thumbnail?: string | null; children?: { title: string; media_content_id: string; media_content_type: string; can_play: boolean; thumbnail?: string | null }[] }>(
+      `api/ha/browse/${entity}?${new URLSearchParams({ id, type })}`,
+    ),
+  /** Thumbnails HA serves behind login come back as /api/... paths; route them through the add-on. */
+  artUrl: (u?: string | null) => (!u ? '' : u.startsWith('/api/') ? `api/ha/image?path=${encodeURIComponent(u)}` : u),
   musicAssistantEntry: () => j<{ entry_id: string | null }>('api/ha/music_assistant'),
 
   calendars: () => j<CalendarInfo[]>('api/ha/calendars'),

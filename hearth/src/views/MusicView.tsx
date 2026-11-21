@@ -1,18 +1,22 @@
-import { ListMusic, Pause, Play, SkipBack, SkipForward, Volume1, Volume2 } from 'lucide-react';
+import { Disc3, ListMusic, Pause, Play, Shuffle, SkipBack, SkipForward, Volume1, Volume2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Modal } from '../components/Modal';
 import { AlbumArt } from '../components/NowPlaying';
 import { api } from '../lib/api';
 import { useNow } from '../lib/hooks';
-import { F, can, titleOf, useMusic, type Player } from '../lib/music';
 import { t } from '../lib/i18n';
+import { F, can, massOf, titleOf, useMusic, type Player } from '../lib/music';
 
-interface Playlist {
+interface LibItem {
   name: string;
   uri: string;
   image?: string | null;
+  subtitle?: string;
+  kind: 'playlist' | 'album';
 }
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const imageOf = (v: unknown) => (typeof v === 'string' ? v : v && typeof v === 'object' && 'path' in v ? String((v as { path: string }).path) : null);
 
 function Progress({ p }: { p: Player }) {
   const now = useNow(1000);
@@ -32,25 +36,48 @@ function Progress({ p }: { p: Player }) {
   );
 }
 
+function Cover({ item, size }: { item: LibItem; size?: number }) {
+  const [broken, setBroken] = useState(false);
+  const src = api.artUrl(item.image);
+  if (!src || broken)
+    return (
+      <span className="playlist-art" style={size ? { width: size, height: size } : undefined}>
+        {item.kind === 'album' ? <Disc3 size={28} /> : <ListMusic size={28} />}
+      </span>
+    );
+  return <img src={src} alt="" onError={() => setBroken(true)} style={size ? { width: size, height: size } : undefined} />;
+}
+
 export function MusicView() {
   const { players, massPlayers, active, select, call } = useMusic();
   const [target, setTarget] = useState<string>('');
-  const [playlists, setPlaylists] = useState<Playlist[] | null>(null);
-  const [entry, setEntry] = useState<string | null>(null);
+  const [lib, setLib] = useState<{ playlists: LibItem[]; albums: LibItem[] } | null>(null);
+  const [open, setOpen] = useState<LibItem | null>(null);
 
-  // Music Assistant playlists, when it's installed.
+  // Music Assistant library, when it's installed.
   useEffect(() => {
     (async () => {
       try {
         const { entry_id } = await api.musicAssistantEntry();
         if (!entry_id) return;
-        setEntry(entry_id);
-        const r = await api.service<{ service_response: { items: Playlist[] } }>(
-          'music_assistant', 'get_library', { config_entry_id: entry_id, media_type: 'playlist', limit: 24 }, true,
-        );
-        setPlaylists(r.service_response?.items ?? []);
+        const get = (media_type: string) =>
+          api
+            .service<{ service_response: { items: any[] } }>('music_assistant', 'get_library', { config_entry_id: entry_id, media_type, limit: 30 }, true)
+            .then((r) => r.service_response?.items ?? [])
+            .catch(() => []);
+        const [pls, als] = await Promise.all([get('playlist'), get('album')]);
+        setLib({
+          playlists: pls.map((x) => ({ name: x.name, uri: x.uri, image: imageOf(x.image), kind: 'playlist' })),
+          albums: als.map((x) => ({
+            name: x.name,
+            uri: x.uri,
+            image: imageOf(x.image),
+            subtitle: (x.artists ?? []).map((a: any) => a?.name).filter(Boolean).join(', '),
+            kind: 'album',
+          })),
+        });
       } catch {
-        setPlaylists(null);
+        setLib(null);
       }
     })();
   }, []);
@@ -67,13 +94,26 @@ export function MusicView() {
 
   const p = active!;
   const playing = p.state === 'playing';
-  // Music Assistant can only play to its own players: use the chosen one, else the active
-  // speaker if it's an MA player, else the MA player with the same name, else the first.
-  const playTarget =
-    massPlayers.find((m) => m.id === target) ??
-    (p.mass ? p : undefined) ??
-    massPlayers.find((m) => m.name.toLowerCase() === p.name.toLowerCase()) ??
-    massPlayers[0];
+  // Music Assistant can only play to its own players: the chosen one, else this speaker's
+  // Music Assistant entity, else the first one.
+  const playTarget = massPlayers.find((m) => m.id === target) ?? massOf(p) ?? massPlayers[0];
+
+  const section = (title: string, items: LibItem[]) =>
+    items.length > 0 && (
+      <section className="playlists">
+        <h3 className="today-label">{title}</h3>
+        <div className="playlist-grid">
+          {items.map((it) => (
+            <button key={it.uri} className="playlist" onClick={() => setOpen(it)}>
+              <Cover item={it} />
+              <span>{it.name}</span>
+              {it.subtitle && <span className="muted small">{it.subtitle}</span>}
+            </button>
+          ))}
+        </div>
+      </section>
+    );
+
   return (
     <div className="music">
       <div className="view-head">
@@ -126,12 +166,10 @@ export function MusicView() {
           </div>
         </div>
 
-        {entry && playlists && playlists.length > 0 && (
-          <section className="playlists">
+        {lib && (lib.playlists.length > 0 || lib.albums.length > 0) && (
+          <>
             <div className="playlist-head">
-              <h3 className="today-label">
-                <ListMusic size={14} /> {t('Playlists')} · Music Assistant
-              </h3>
+              <span className="muted small">Music Assistant</span>
               {massPlayers.length > 1 && (
                 <label className="play-on">
                   {t('Play on')}
@@ -146,25 +184,109 @@ export function MusicView() {
               )}
             </div>
             {massPlayers.length === 0 && <p className="muted small">{t('No Music Assistant speakers found. Playlists can only play on Music Assistant players.')}</p>}
-            <div className="playlist-grid">
-              {playlists.map((pl) => (
-                <button
-                  key={pl.uri}
-                  className="playlist"
-                  disabled={!playTarget}
-                  onClick={async () => {
-                    if (!playTarget) return;
-                    if (await call('music_assistant.play_media', { media_id: pl.uri, media_type: 'playlist' }, playTarget.id)) select(playTarget.id);
-                  }}
-                >
-                  {pl.image ? <img src={pl.image} alt="" /> : <span className="playlist-art"><ListMusic size={28} /></span>}
-                  <span>{pl.name}</span>
-                </button>
-              ))}
-            </div>
-          </section>
+            {section(t('Playlists'), lib.playlists)}
+            {section(t('Albums'), lib.albums)}
+          </>
         )}
       </div>
+
+      {open && playTarget && (
+        <TrackList
+          item={open}
+          player={playTarget}
+          onClose={() => setOpen(null)}
+          onPlay={async (data) => {
+            if (await call('music_assistant.play_media', data, playTarget.id)) {
+              select(playTarget.id);
+              setOpen(null);
+            }
+          }}
+          onShuffle={() => call('media_player.shuffle_set', { shuffle: true }, playTarget.id)}
+        />
+      )}
     </div>
+  );
+}
+
+interface Track {
+  id: string;
+  title: string;
+  sub?: string;
+}
+
+function TrackList({ item, player, onClose, onPlay, onShuffle }: {
+  item: LibItem;
+  player: Player;
+  onClose: () => void;
+  onPlay: (data: Record<string, unknown>) => void;
+  onShuffle: () => Promise<boolean>;
+}) {
+  const [tracks, setTracks] = useState<Track[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .browse(player.id, item.uri, item.kind)
+      .then((r) =>
+        setTracks(
+          (r.children ?? [])
+            .filter((c) => c.can_play)
+            .map((c) => {
+              const [title, ...rest] = c.title.split(' - ');
+              return { id: c.media_content_id, title, sub: rest.join(' - ') || undefined };
+            }),
+        ),
+      )
+      .catch((e) => setErr((e as Error).message));
+  }, [player.id, item.uri, item.kind]);
+
+  const playAll = () => onPlay({ media_id: item.uri, media_type: item.kind, enqueue: 'replace' });
+  return (
+    <Modal title={item.name} onClose={onClose} wide>
+      <div className="tracklist">
+        <div className="tracklist-head">
+          <Cover item={item} size={120} />
+          <div className="grow">
+            <span className="muted small">
+              {item.kind === 'album' ? t('Album') : t('Playlist')}
+              {item.subtitle ? ` · ${item.subtitle}` : ''}
+            </span>
+            <h2>{item.name}</h2>
+            {tracks && (
+              <span className="muted small">
+                {t('{n} songs', { n: tracks.length })} · {t('on {player}', { player: player.name })}
+              </span>
+            )}
+            <div className="row" style={{ marginTop: 10 }}>
+              <button className="btn primary" onClick={playAll}>
+                <Play size={18} fill="currentColor" /> {t('Play all')}
+              </button>
+              <button className="btn" onClick={async () => { if (await onShuffle()) playAll(); }}>
+                <Shuffle size={18} /> {t('Shuffle')}
+              </button>
+            </div>
+          </div>
+        </div>
+        {err && <p className="error">{t('Couldn’t load the songs: {error}', { error: err })}</p>}
+        {!tracks && !err && <p className="muted">{t('Loading…')}</p>}
+        {tracks && (
+          <ol className="tracks">
+            {tracks.map((tr, k) => (
+              <li key={tr.id}>
+                {/* Play this song and the rest of the list after it. */}
+                <button onClick={() => onPlay({ media_id: tracks.slice(k).map((x) => x.id), media_type: 'track', enqueue: 'replace' })}>
+                  <span className="track-num">{k + 1}</span>
+                  <span className="grow">
+                    <b>{tr.title}</b>
+                    {tr.sub && <span className="muted small">{tr.sub}</span>}
+                  </span>
+                  <Play size={16} className="track-play" />
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    </Modal>
   );
 }

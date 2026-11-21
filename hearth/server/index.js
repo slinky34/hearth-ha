@@ -15,7 +15,7 @@ const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.5.0';
+const VERSION = process.env.HEARTH_VERSION || '0.6.0';
 
 // Add-on options (set on the add-on's Configuration tab in Home Assistant).
 let options = {};
@@ -76,6 +76,35 @@ async function ha(method, apiPath, body) {
     data = { message: text };
   }
   return { status: res.status, data };
+}
+
+// One-off Home Assistant websocket command (for things REST can't do, like browsing media).
+async function haWs(type, payload = {}) {
+  if (mock) return mock.ws(type, payload);
+  if (typeof WebSocket === 'undefined') throw new Error('This Node version has no WebSocket support');
+  const url = IN_ADDON ? 'ws://supervisor/core/websocket' : haBase.replace(/^http/, 'ws') + '/websocket';
+  return new Promise((resolve, reject) => {
+    const sock = new WebSocket(url);
+    const timer = setTimeout(() => {
+      sock.close();
+      reject(new Error('Home Assistant did not answer in time'));
+    }, 20000);
+    const done = (fn, v) => {
+      clearTimeout(timer);
+      try { sock.close(); } catch { /* closed */ }
+      fn(v);
+    };
+    sock.onerror = () => done(reject, new Error('Could not connect to Home Assistant'));
+    sock.onmessage = (ev) => {
+      let msg;
+      try { msg = JSON.parse(String(ev.data)); } catch { return; }
+      if (msg.type === 'auth_required') sock.send(JSON.stringify({ type: 'auth', access_token: haToken }));
+      else if (msg.type === 'auth_invalid') done(reject, new Error('Home Assistant rejected the token'));
+      else if (msg.type === 'auth_ok') sock.send(JSON.stringify({ id: 1, type, ...payload }));
+      else if (msg.type === 'result' && msg.id === 1)
+        msg.success ? done(resolve, msg.result) : done(reject, new Error(msg.error?.message || 'Request failed'));
+    };
+  });
 }
 
 // Only these services can be called through Hearth. Locks, alarms, and covers
@@ -310,6 +339,27 @@ async function route(req, res) {
     if (!img.ok) return send(res, img.status, 'Artwork unavailable');
     const buf = Buffer.from(await img.arrayBuffer());
     return send(res, 200, buf, { 'Content-Type': img.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'max-age=300' });
+  }
+  // Browse a media player's library (playlists, albums -> tracks), like HA's media browser.
+  match = p.match(/^\/api\/ha\/browse\/(media_player\.[a-z0-9_]+)$/);
+  if (match && m === 'GET') {
+    const id = url.searchParams.get('id');
+    const type = url.searchParams.get('type');
+    const result = await haWs('media_player/browse_media', {
+      entity_id: match[1],
+      ...(id ? { media_content_id: id } : {}),
+      ...(type ? { media_content_type: type } : {}),
+    });
+    return send(res, 200, result);
+  }
+  // Artwork that HA serves behind its own login (relative /api/... thumbnails).
+  if (p === '/api/ha/image' && m === 'GET') {
+    const path_ = url.searchParams.get('path') || '';
+    if (!/^\/api\/(media_player_proxy|image_proxy|media_source)\//.test(path_)) return send(res, 400, 'Bad path');
+    if (mock) return send(res, 404, 'No image');
+    const img = await fetch(haOrigin() + path_, { headers: { Authorization: `Bearer ${haToken}` }, signal: AbortSignal.timeout(15000) });
+    if (!img.ok) return send(res, img.status, 'Image unavailable');
+    return send(res, 200, Buffer.from(await img.arrayBuffer()), { 'Content-Type': img.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'max-age=3600' });
   }
   // Mealie integration's config entry id (needed for every mealie.* service).
   if (p === '/api/ha/mealie' && m === 'GET') {
