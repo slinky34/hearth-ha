@@ -54,3 +54,11 @@ export function stripes(colors: string[], amount = 0.42) {
   const stops = colors.map((c, i) => `${pastel(c, amount)} ${i * w}px ${(i + 1) * w}px`).join(', ');
   return `repeating-linear-gradient(120deg, ${stops})`;
 }
+
+import type { CalEvent as _CalEvent, Member as _Member } from './types';
+const _norm = (s: string) => s.trim().toLowerCase();
+/** Family members an event belongs to: via their linked calendars or tagged by name ("Who: …"). */
+export function eventMembers(e: _CalEvent, members: _Member[]) {
+  const tagged = new Set(e.people.map(_norm));
+  return members.filter((m) => e.calendars.some((c) => m.calendars.includes(c)) || tagged.has(_norm(m.name)));
+}

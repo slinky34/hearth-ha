@@ -135,9 +135,11 @@ export function createMockHA() {
         media_position: p.state === 'playing' ? 0 : 74,
         media_position_updated_at: new Date(p.started).toISOString(),
         volume_level: p.volume,
+        shuffle: Boolean(p.shuffle),
+        repeat: p.repeat ?? 'off',
         is_volume_muted: false,
         entity_picture: `/api/media_player_proxy/${id}`,
-        supported_features: id === 'media_player.kitchen' ? 1 | 4 | 16384 : 0xffff,
+        supported_features: id === 'media_player.kitchen' ? 1 | 4 | 16384 : 0xffff | 262144,
         ...(MASS.has(id) ? { mass_player_type: 'player', active_queue: id } : {}),
       },
     };
@@ -217,7 +219,43 @@ export function createMockHA() {
     }));
   };
 
+  const COCKTAILS = [
+    { id: 'margarita', name: 'Margarita', emoji: '🍹', color: '#6CBF84', description: 'Bright, tart, and salty-rimmed.', garnish: 'Lime wheel, salt rim', glass: 'Coupe', method: 'Shake',
+      ingredients: [['Tequila', 50, 'ml'], ['Lime juice', 25, 'ml'], ['Triple sec', 20, 'ml'], ['Agave syrup', 5, 'ml', true]],
+      instructions: '1. Rub a lime wedge around the rim and dip in salt.\n2. Add everything to a shaker with ice.\n3. Shake hard for 15 seconds.\n4. Strain into the glass.' },
+    { id: 'old-fashioned', name: 'Old Fashioned', emoji: '🥃', color: '#F2A541', description: 'Whiskey, sugar, bitters. The classic.', garnish: 'Orange peel', glass: 'Rocks', method: 'Stir',
+      ingredients: [['Bourbon', 60, 'ml'], ['Simple syrup', 7.5, 'ml'], ['Angostura bitters', 2, 'dashes']],
+      instructions: '- Add syrup and bitters to a mixing glass.\n- Add bourbon and ice, then stir for 30 seconds.\n- Strain over a large ice cube and express the orange peel.' },
+    { id: 'shirley-temple', name: 'Shirley Temple (no alcohol)', emoji: '🍒', color: '#E9736B', description: 'The kids’ favorite fizzy pink drink.', garnish: 'Maraschino cherry', glass: 'Highball', method: 'Build',
+      ingredients: [['Ginger ale', 150, 'ml'], ['Grenadine', 15, 'ml'], ['Lime juice', 5, 'ml', true]],
+      instructions: 'Fill a glass with ice.\nPour in the ginger ale, then the grenadine.\nTop with a cherry.' },
+  ];
+  const cSummary = (c) => ({ id: c.id, name: c.name, description: c.description, image: `api/bar/image?u=${encodeURIComponent('mock:' + c.id)}` });
+
   return {
+    places(q) {
+      const all = [
+        { label: 'Tara Morgan Elementary School', sub: '410 Oak St, Springfield, IL, United States' },
+        { label: 'Taramore Park', sub: 'Lakeview Dr, Springfield, IL, United States' },
+        { label: 'Riverside Park', sub: '200 River Rd, Springfield, IL, United States' },
+        { label: 'Rec Center', sub: '55 Main St, Springfield, IL, United States' },
+        { label: 'Smile Dental', sub: '12 Elm Ave, Springfield, IL, United States' },
+      ];
+      const n = q.toLowerCase().replace(/\s+/g, '');
+      return all.filter((p) => p.label.toLowerCase().replace(/\s+/g, '').includes(n.slice(0, 5)) || p.sub.toLowerCase().includes(q.toLowerCase()));
+    },
+    cocktails(q) {
+      return COCKTAILS.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase())).map(cSummary);
+    },
+    cocktail(id) {
+      const c = COCKTAILS.find((x) => x.id === id) ?? COCKTAILS[0];
+      return { ...cSummary(c), garnish: c.garnish, glass: c.glass, method: c.method, instructions: c.instructions,
+        ingredients: c.ingredients.map(([name, amount, units, optional]) => ({ name, amount, amount_max: null, units, optional: Boolean(optional), note: null })) };
+    },
+    cocktailArt(id) {
+      const c = COCKTAILS.find((x) => x.id === id) ?? COCKTAILS[0];
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c.color}"/><stop offset="1" stop-color="#1f2430"/></linearGradient></defs><rect width="400" height="300" fill="url(#g)"/><text x="200" y="185" font-size="120" text-anchor="middle">${c.emoji}</text></svg>`;
+    },
     ws(type, payload) {
       if (type !== 'media_player/browse_media') return Promise.reject(new Error(`Mock ws: ${type}`));
       const id = String(payload.media_content_id || '');
@@ -259,8 +297,12 @@ export function createMockHA() {
         return ok([{ domain: 'notify', services: { mobile_app_jordans_phone: {}, mobile_app_alexs_ipad: {}, persistent_notification: {}, send_message: {} } }]);
       if (method === 'GET' && p === '/config/config_entries/entry') {
         const domain = url.searchParams.get('domain');
-        if (domain === 'mealie') return ok([{ entry_id: 'mock_mealie', domain: 'mealie', state: 'loaded', title: 'Mealie' }]);
-        return ok([{ entry_id: 'mock_mass', domain: 'music_assistant', state: 'loaded', title: 'Music Assistant' }]);
+        const all = [
+          { entry_id: 'mock_mealie', domain: 'mealie', state: 'loaded', title: 'Mealie' },
+          { entry_id: 'mock_mass', domain: 'music_assistant', state: 'loaded', title: 'Music Assistant' },
+          { entry_id: 'mock_grocy', domain: 'grocy', state: 'loaded', title: 'Grocy' },
+        ];
+        return ok(domain ? all.filter((e) => e.domain === domain) : all);
       }
       if (method === 'GET' && p.startsWith('/states/')) {
         const s = states().find((x) => x.entity_id === p.split('/')[2]);
@@ -328,6 +370,12 @@ export function createMockHA() {
             pl.track = (pl.track + (svc.endsWith('next_track') ? 1 : TRACKS.length - 1)) % TRACKS.length;
             pl.started = Date.now();
           }
+          return ok([]);
+        case 'media_player.shuffle_set':
+          for (const e of entities) if (players[e]) players[e].shuffle = Boolean(body.shuffle);
+          return ok([]);
+        case 'media_player.repeat_set':
+          for (const e of entities) if (players[e]) players[e].repeat = body.repeat;
           return ok([]);
         case 'media_player.volume_set':
           for (const e of entities) if (players[e]) players[e].volume = Number(body.volume_level);

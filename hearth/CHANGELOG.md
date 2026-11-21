@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0
+- **Bar Assistant cocktails:** set the address and API token on the Configuration tab and a Cocktails tab appears in Recipes, with glass, method, and garnish, the ingredients, and step-by-step mixing mode.
+- **New events:**
+  - Pick **several calendars** at once, and the event is added to each one.
+  - Tag family members under **Who's going?**. It's saved in the event description as a "Who: …" line, so it works on any calendar.
+  - The same event in several calendars now shows once, with everyone's colors.
+- **Location suggestions** while typing an event location (OpenStreetMap / Photon, favoring places near home).
+- **Shuffle and repeat** buttons in the music controls.
+- **Settings:**
+  - New **Integrations** section showing what's connected and how to set up the rest.
+  - Speakers, lists, and home controls now use a compact search picker instead of long rows of buttons.
+
 ## 0.6.0
 - **Skip back/forward fixed:** when a speaker shows up twice in Home Assistant (its own integration plus Music Assistant), Hearth now treats it as one speaker. Each command (play/pause, skip, volume) goes to whichever of the two supports it, so skip works even if the speaker's own entity can't.
 - **Playlists and albums open a song list** instead of playing right away. Use Play all or Shuffle, or tap a song to play from there.

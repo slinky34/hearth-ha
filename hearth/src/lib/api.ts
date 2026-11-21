@@ -26,6 +26,18 @@ interface HaEvent {
   end: { date?: string; dateTime?: string };
 }
 
+// A "Who: Oj, Omar" line in an event's description tags family members (works on any calendar).
+const WHO_RE = /^\s*(?:who|👥)\s*:\s*(.+)$/im;
+export const whoLine = (names: string[]) => `Who: ${names.join(', ')}`;
+
+function splitWho(description?: string) {
+  const m = description?.match(WHO_RE);
+  if (!m) return { people: [] as string[], description: description || undefined };
+  const people = m[1].split(/\s*(?:,|&|\band\b|\+)\s*/i).map((x) => x.trim()).filter(Boolean);
+  const rest = description!.replace(m[0], '').trim();
+  return { people, description: rest || undefined };
+}
+
 function toEvent(e: HaEvent, calendar: string): CalEvent {
   const allDay = !e.start.dateTime;
   const start = allDay ? parseISO(e.start.date!) : new Date(e.start.dateTime!);
@@ -37,8 +49,9 @@ function toEvent(e: HaEvent, calendar: string): CalEvent {
     end: end > start ? end : new Date(start.getTime() + (allDay ? 86400000 : 0)),
     allDay,
     calendar,
+    calendars: [calendar],
     location: e.location || undefined,
-    description: e.description || undefined,
+    ...splitWho(e.description),
   };
 }
 

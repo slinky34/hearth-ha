@@ -15,3 +15,7 @@ To use Hearth on a tablet that isn't signed in to HA, set a host port for `8099/
 **Recipes:** add Home Assistant's **Mealie** integration and your recipes and meal plan show up on the Recipes screen. To see recipe photos, also set **Mealie address** (`mealie_url`, for example `http://192.168.1.20:9000`) on the Configuration tab.
 
 **Music Assistant playlists** only play on Music Assistant's own speaker entities. If a speaker appears twice (for example Sonos and Music Assistant), Hearth automatically sends playlists to the Music Assistant one.
+
+**Cocktails (Bar Assistant):** set **Bar Assistant address** (for example `http://192.168.1.20:3000`), an **API token** (in Bar Assistant: Settings → Personal access tokens), and optionally a **Bar ID** on the Configuration tab, then restart. A Cocktails tab appears under Recipes.
+
+**Event locations:** suggestions come from Photon (photon.komoot.io, OpenStreetMap data) through the add-on. Only the text typed into the Location box is sent.

@@ -10,6 +10,9 @@ export interface RecipeSummary {
   hasImage: boolean;
   yield?: string;
   time?: string;
+  /** Direct image URL (Bar Assistant); Mealie images use imageUrl(id). */
+  imageSrc?: string | null;
+  source?: 'mealie' | 'bar';
 }
 export interface Ingredient {
   quantity?: number | null;
@@ -25,6 +28,8 @@ export interface Step {
   text: string;
 }
 export interface Recipe extends RecipeSummary {
+  /** Extra facts shown as chips (glass, method, garnish…). */
+  extras?: string[];
   ingredients: Ingredient[];
   steps: Step[];
   url?: string;

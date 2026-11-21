@@ -1,4 +1,4 @@
-import { Disc3, ListMusic, Pause, Play, Shuffle, SkipBack, SkipForward, Volume1, Volume2 } from 'lucide-react';
+import { Disc3, ListMusic, Pause, Play, Repeat, Repeat1, Shuffle, SkipBack, SkipForward, Volume1, Volume2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Modal } from '../components/Modal';
 import { AlbumArt } from '../components/NowPlaying';
@@ -138,6 +138,16 @@ export function MusicView() {
             {p.album && <p className="muted small">{p.album}</p>}
             <Progress p={p} />
             <div className="music-controls">
+              {can(p, F.SHUFFLE_SET) && (
+                <button
+                  className={`icon-btn mode ${p.shuffle ? 'on' : ''}`}
+                  onClick={() => call('shuffle_set', { shuffle: !p.shuffle })}
+                  aria-label={t('Shuffle')}
+                  aria-pressed={!!p.shuffle}
+                >
+                  <Shuffle size={22} />
+                </button>
+              )}
               <button className="icon-btn big" onClick={() => call('media_previous_track')} aria-label={t('Previous')} disabled={!can(p, F.PREVIOUS)}>
                 <SkipBack size={28} fill="currentColor" />
               </button>
@@ -147,6 +157,15 @@ export function MusicView() {
               <button className="icon-btn big" onClick={() => call('media_next_track')} aria-label={t('Next')} disabled={!can(p, F.NEXT)}>
                 <SkipForward size={28} fill="currentColor" />
               </button>
+              {can(p, F.REPEAT_SET) && (
+                <button
+                  className={`icon-btn mode ${p.repeat && p.repeat !== 'off' ? 'on' : ''}`}
+                  onClick={() => call('repeat_set', { repeat: p.repeat === 'off' || !p.repeat ? 'all' : p.repeat === 'all' ? 'one' : 'off' })}
+                  aria-label={p.repeat === 'one' ? t('Repeat one') : p.repeat === 'all' ? t('Repeat all') : t('Repeat off')}
+                >
+                  {p.repeat === 'one' ? <Repeat1 size={22} /> : <Repeat size={22} />}
+                </button>
+              )}
             </div>
             {p.volume != null && can(p, F.VOLUME_SET) && (
               <label className="volume">

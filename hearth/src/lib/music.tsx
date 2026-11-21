@@ -6,7 +6,7 @@ import { useStore } from './store';
 import type { HaState } from './types';
 
 // media_player supported_features bits (homeassistant.components.media_player.MediaPlayerEntityFeature)
-export const F = { PAUSE: 1, SEEK: 2, VOLUME_SET: 4, PREVIOUS: 16, NEXT: 32, PLAY_MEDIA: 512, PLAY: 16384 };
+export const F = { PAUSE: 1, SEEK: 2, VOLUME_SET: 4, PREVIOUS: 16, NEXT: 32, PLAY_MEDIA: 512, PLAY: 16384, SHUFFLE_SET: 32768, REPEAT_SET: 262144 };
 
 // Placeholder titles some integrations report when they don't know what's playing.
 const NO_TITLE = /^(not provided|unknown|none|null|n\/a|-)$/i;
@@ -20,6 +20,8 @@ export interface Player {
   album?: string;
   app?: string;
   volume?: number;
+  shuffle?: boolean;
+  repeat?: 'off' | 'all' | 'one';
   duration?: number;
   position?: number;
   positionAt?: number; // ms timestamp the position was reported
@@ -54,7 +56,9 @@ function pairTwins(all: Player[]): Player[] {
     // Show whichever is actually playing; prefer the Music Assistant one otherwise.
     const lead = isActiveState(p) && !isActiveState(twin) ? p : twin;
     const other = lead === p ? twin : p;
-    out.push({ ...lead, name: p.name, twin: other });
+    // Show shuffle/repeat from whichever entity actually controls them.
+    const from = (f: number) => ((lead.features & f) !== 0 ? lead : other);
+    out.push({ ...lead, name: p.name, twin: other, shuffle: from(F.SHUFFLE_SET).shuffle, repeat: from(F.REPEAT_SET).repeat });
   }
   mass.filter((m) => !used.has(m.id)).forEach((m) => out.push(m));
   return out.sort((a, b) => a.name.localeCompare(b.name));
@@ -66,6 +70,8 @@ const FEATURE_FOR: Record<string, number> = {
   volume_set: F.VOLUME_SET,
   media_pause: F.PAUSE,
   media_play: F.PLAY,
+  shuffle_set: F.SHUFFLE_SET,
+  repeat_set: F.REPEAT_SET,
 };
 
 const clean = (v: unknown) => (typeof v === 'string' && v.trim() && !NO_TITLE.test(v.trim()) ? v.trim() : undefined);
@@ -81,6 +87,8 @@ function toPlayer(s: HaState): Player {
     album: clean(a.media_album_name),
     app: clean(a.app_name) || clean(a.source),
     volume: typeof a.volume_level === 'number' ? a.volume_level : undefined,
+    shuffle: typeof a.shuffle === 'boolean' ? a.shuffle : undefined,
+    repeat: a.repeat === 'all' || a.repeat === 'one' || a.repeat === 'off' ? a.repeat : undefined,
     duration: a.media_duration,
     position: a.media_position,
     positionAt: a.media_position_updated_at ? Date.parse(a.media_position_updated_at) : undefined,
@@ -167,6 +175,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       if (svc === 'media_pause' || svc === 'media_play')
         setPlayers((ps) => ps.map((x) => (x.id === id ? { ...x, state: svc === 'media_pause' ? 'paused' : 'playing' } : x)));
       if (svc === 'volume_set') setPlayers((ps) => ps.map((x) => (x.id === id ? { ...x, volume: Number(data.volume_level) } : x)));
+      if (svc === 'shuffle_set') setPlayers((ps) => ps.map((x) => (x.id === p?.id ? { ...x, shuffle: Boolean(data.shuffle) } : x)));
+      if (svc === 'repeat_set') setPlayers((ps) => ps.map((x) => (x.id === p?.id ? { ...x, repeat: data.repeat as Player['repeat'] } : x)));
       try {
         await api.service(domain, svc, { entity_id: target, ...data });
         setTimeout(load, 700);

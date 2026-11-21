@@ -78,7 +78,19 @@ export function useEvents(calendars: CalendarInfo[], start: Date, end: Date) {
 
   const load = useCallback(async () => {
     const results = await Promise.allSettled(calendars.map((c) => api.events(c.entity_id, start, end)));
-    const ok = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+    const all = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+    // The same event added to several calendars shows once, belonging to all of them.
+    const merged = new Map<string, CalEvent>();
+    for (const e of all) {
+      const k = `${e.title.trim().toLowerCase()}|${e.start.getTime()}|${e.end.getTime()}|${e.allDay}`;
+      const prev = merged.get(k);
+      if (!prev) merged.set(k, { ...e });
+      else {
+        prev.calendars = [...new Set([...prev.calendars, ...e.calendars])];
+        prev.people = [...new Set([...prev.people, ...e.people])];
+      }
+    }
+    const ok = [...merged.values()];
     const failed = results.filter((r) => r.status === 'rejected').length;
     setEvents(ok.sort((a, b) => a.start.getTime() - b.start.getTime()));
     setError(failed ? `${failed} calendar${failed > 1 ? 's' : ''} failed to load` : null);

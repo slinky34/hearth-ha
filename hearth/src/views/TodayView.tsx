@@ -5,7 +5,7 @@ import { useEvents, useHa } from '../lib/ha';
 import { useNow } from '../lib/hooks';
 import { useStore } from '../lib/store';
 import type { CalEvent, Chore, Member } from '../lib/types';
-import { dateKey, dueOn, fmtTime, initials, pastel, stripes } from '../lib/util';
+import { dateKey, dueOn, eventMembers, fmtTime, initials, pastel, stripes } from '../lib/util';
 import { AddEvent, EventDetail, MemberStrip } from './CalendarView';
 import { t } from '../lib/i18n';
 
@@ -22,7 +22,13 @@ export function TodayView() {
   const [picked, setPicked] = useState<CalEvent | null>(null);
   const [adding, setAdding] = useState(false);
 
-  const sorted = [...events.filter((e) => e.allDay), ...events.filter((e) => !e.allDay)];
+  const forSelected = selected.length
+    ? events.filter((e) => {
+        const w = eventMembers(e, members);
+        return w.length === 0 || w.some((m) => selected.includes(m.id));
+      })
+    : events;
+  const sorted = [...forSelected.filter((e) => e.allDay), ...forSelected.filter((e) => !e.allDay)];
   const calName = (id: string) => calendars.find((c) => c.entity_id === id)?.name ?? id;
   const done = new Set(completions[todayKey] ?? []);
   const toggle = (c: Chore) =>
@@ -34,7 +40,7 @@ export function TodayView() {
     });
 
   const card = (e: CalEvent) => {
-    const who = members.filter((m) => m.calendars.includes(e.calendar));
+    const who = eventMembers(e, members);
     const colors = who.length ? who.map((m) => m.color) : [colorOf(e.calendar)];
     return (
       <button
@@ -95,8 +101,7 @@ export function TodayView() {
 
   // Everyone: one column per person, plus a Family column for shared calendars.
   if (selected.length === 0 && members.length > 0) {
-    const linked = new Set(members.flatMap((m) => m.calendars));
-    const shared = sorted.filter((e) => !linked.has(e.calendar));
+    const shared = sorted.filter((e) => eventMembers(e, members).length === 0);
     return (
       <div className="today-split-wrap">
         <MemberStrip />
@@ -113,7 +118,7 @@ export function TodayView() {
             </section>
           )}
           {members.map((m) => {
-            const mine = sorted.filter((e) => m.calendars.includes(e.calendar));
+            const mine = sorted.filter((e) => eventMembers(e, members).some((x) => x.id === m.id));
             const tasks = chores.filter((c) => c.memberId === m.id && dueOn(c, today));
             const n = tasks.filter((c) => done.has(c.id)).length;
             return (

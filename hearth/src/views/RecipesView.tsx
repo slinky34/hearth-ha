@@ -1,5 +1,5 @@
 import { isToday, parseISO, startOfDay } from 'date-fns';
-import { CalendarPlus, ChefHat, ChevronLeft, ChevronRight, Clock, ExternalLink, ListPlus, Search, Timer as TimerIcon, Users, X } from 'lucide-react';
+import { CalendarPlus, ChefHat, Wine, ChevronLeft, ChevronRight, Clock, ExternalLink, ListPlus, Search, Timer as TimerIcon, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
 import { Modal } from '../components/Modal';
 import { toast } from '../components/Toast';
@@ -12,6 +12,7 @@ import {
   type PlanEntry, type Recipe, type RecipeSummary,
 } from '../lib/mealie';
 import { dateKey } from '../lib/util';
+import { barCocktail, barCocktails } from '../lib/bar';
 
 /** Lets other screens (e.g. Meals) open a recipe: the app switches here and passes it in. */
 export function openRecipe(idOrSlug: string) {
@@ -22,49 +23,65 @@ const TYPE_ICON: Record<string, string> = { breakfast: '🥣', lunch: '🥪', di
 
 function RecipeImage({ r, images, className }: { r: RecipeSummary; images: boolean; className?: string }) {
   const [broken, setBroken] = useState(false);
-  if (!images || !r.hasImage || broken)
+  const src = r.imageSrc ?? (images && r.hasImage ? imageUrl(r.id) : null);
+  if (!src || broken)
     return (
       <span className={`recipe-img placeholder ${className ?? ''}`}>
-        <ChefHat size={36} />
+        {r.source === 'bar' ? <Wine size={36} /> : <ChefHat size={36} />}
       </span>
     );
-  return <img className={`recipe-img ${className ?? ''}`} src={imageUrl(r.id)} alt="" loading="lazy" onError={() => setBroken(true)} />;
+  return <img className={`recipe-img ${className ?? ''}`} src={src} alt="" loading="lazy" onError={() => setBroken(true)} />;
 }
 
+type Source = 'mealie' | 'bar';
+
 export function RecipesView({ openSlug, onOpened }: { openSlug?: string | null; onOpened?: () => void }) {
-  const [state, setState] = useState<'loading' | 'missing' | 'ready'>('loading');
+  const [mealie, setMealie] = useState<'loading' | 'missing' | 'ready'>('loading');
+  const [bar, setBar] = useState<'loading' | 'missing' | 'ready'>('loading');
+  const [source, setSource] = useState<Source>('mealie');
   const [images, setImages] = useState(false);
   const [plan, setPlan] = useState<PlanEntry[]>([]);
   const [results, setResults] = useState<RecipeSummary[] | null>(null);
   const [noSearch, setNoSearch] = useState(false);
   const [q, setQ] = useState('');
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<{ id: string; source: Source } | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         const e = await mealieEntry();
-        if (!e.entry_id) return setState('missing');
+        if (!e.entry_id) return setMealie('missing');
         setImages(e.images);
-        setState('ready');
+        setMealie('ready');
         mealPlan(startOfDay(new Date())).then(setPlan).catch(() => setPlan([]));
       } catch {
-        setState('missing');
+        setMealie('missing');
       }
     })();
+    barCocktails('')
+      .then(() => setBar('ready'))
+      .catch(() => setBar('missing'));
   }, []);
+
+  // Start on cocktails when Mealie isn't set up but Bar Assistant is.
+  useEffect(() => {
+    if (mealie === 'missing' && bar === 'ready') setSource('bar');
+  }, [mealie, bar]);
 
   useEffect(() => {
     if (!openSlug) return;
-    setOpen(openSlug);
+    setOpen({ id: openSlug, source: 'mealie' });
     onOpened?.();
   }, [openSlug, onOpened]);
 
+  const ready = source === 'mealie' ? mealie === 'ready' : bar === 'ready';
+
   // Search (debounced). Empty query lists recipes too.
   useEffect(() => {
-    if (state !== 'ready') return;
+    if (!ready) return;
+    setResults(null);
     const id = setTimeout(() => {
-      searchRecipes(q.trim())
+      (source === 'mealie' ? searchRecipes(q.trim()) : barCocktails(q.trim()))
         .then((r) => {
           setResults(r);
           setNoSearch(false);
@@ -72,37 +89,55 @@ export function RecipesView({ openSlug, onOpened }: { openSlug?: string | null; 
         .catch(() => setNoSearch(true));
     }, 300);
     return () => clearTimeout(id);
-  }, [q, state]);
+  }, [q, ready, source]);
 
-  if (state === 'missing')
+  if (mealie === 'missing' && bar === 'missing')
     return (
       <div className="recipes">
         <div className="view-head">
           <h1>{t('Recipes')}</h1>
         </div>
-        <div className="empty">{t('Add the Mealie integration in Home Assistant (Settings → Devices & services) to see your recipes and meal plan here.')}</div>
+        <div className="empty">
+          {t('Add the Mealie integration in Home Assistant (Settings → Devices & services) to see your recipes and meal plan here.')}
+          <br />
+          <br />
+          {t('For cocktails, set your Bar Assistant address and token on the Hearth add-on’s Configuration tab.')}
+        </div>
       </div>
     );
 
+  const both = mealie === 'ready' && bar === 'ready';
   return (
     <div className="recipes">
       <div className="view-head">
-        <h1>{t('Recipes')}</h1>
+        <div className="nav-group">
+          <h1>{t('Recipes')}</h1>
+          {both && (
+            <div className="segmented">
+              <button className={source === 'mealie' ? 'on' : ''} onClick={() => setSource('mealie')}>
+                🍽️ {t('Food')}
+              </button>
+              <button className={source === 'bar' ? 'on' : ''} onClick={() => setSource('bar')}>
+                🍸 {t('Cocktails')}
+              </button>
+            </div>
+          )}
+        </div>
         {!noSearch && (
           <label className="search-box">
             <Search size={18} />
-            <input placeholder={t('Search recipes…')} value={q} onChange={(e) => setQ(e.target.value)} />
+            <input placeholder={source === 'bar' ? t('Search cocktails…') : t('Search recipes…')} value={q} onChange={(e) => setQ(e.target.value)} />
           </label>
         )}
       </div>
 
       <div className="recipes-scroll">
-        {plan.length > 0 && !q && (
+        {source === 'mealie' && plan.length > 0 && !q && (
           <section>
             <h3 className="today-label">{t('Meal plan')}</h3>
             <div className="plan-row">
               {plan.map((p, i) => (
-                <button key={i} className="plan-card" onClick={() => p.recipe && setOpen(p.recipe.slug)} disabled={!p.recipe}>
+                <button key={i} className="plan-card" onClick={() => p.recipe && setOpen({ id: p.recipe.slug, source: 'mealie' })} disabled={!p.recipe}>
                   {p.recipe ? <RecipeImage r={p.recipe} images={images} /> : <span className="recipe-img placeholder">{TYPE_ICON[p.type] ?? '🍽️'}</span>}
                   <span className="plan-when">
                     {isToday(parseISO(p.date)) ? t('Today') : dateMedium(parseISO(p.date))} · {TYPE_ICON[p.type] ?? ''} {t(p.type.charAt(0).toUpperCase() + p.type.slice(1))}
@@ -115,9 +150,13 @@ export function RecipesView({ openSlug, onOpened }: { openSlug?: string | null; 
         )}
 
         <section>
-          <h3 className="today-label">{q ? t('Results') : t('All recipes')}</h3>
+          <h3 className="today-label">{q ? t('Results') : source === 'bar' ? t('Cocktails') : t('All recipes')}</h3>
           {noSearch ? (
-            <p className="muted">{t('Browsing all recipes needs a newer Home Assistant (with the mealie.get_recipes action). Your meal plan still works.')}</p>
+            <p className="muted">
+              {source === 'bar'
+                ? t('Couldn’t reach Bar Assistant.')
+                : t('Browsing all recipes needs a newer Home Assistant (with the mealie.get_recipes action). Your meal plan still works.')}
+            </p>
           ) : results === null ? (
             <p className="muted">{t('Loading…')}</p>
           ) : results.length === 0 ? (
@@ -125,7 +164,7 @@ export function RecipesView({ openSlug, onOpened }: { openSlug?: string | null; 
           ) : (
             <div className="recipe-grid">
               {results.map((r) => (
-                <button key={r.id} className="recipe-card" onClick={() => setOpen(r.slug)}>
+                <button key={r.id} className="recipe-card" onClick={() => setOpen({ id: r.slug, source })}>
                   <RecipeImage r={r} images={images} />
                   <span className="recipe-card-body">
                     <b>{r.name}</b>
@@ -134,6 +173,7 @@ export function RecipesView({ openSlug, onOpened }: { openSlug?: string | null; 
                         <Clock size={13} /> {r.time}
                       </span>
                     )}
+                    {!r.time && r.description && <span className="muted small clamp2">{r.description}</span>}
                   </span>
                 </button>
               ))}
@@ -142,12 +182,20 @@ export function RecipesView({ openSlug, onOpened }: { openSlug?: string | null; 
         </section>
       </div>
 
-      {open && <RecipeDetail slug={open} images={images} onClose={() => setOpen(null)} onPlanned={() => mealPlan(startOfDay(new Date())).then(setPlan)} />}
+      {open && (
+        <RecipeDetail
+          slug={open.id}
+          source={open.source}
+          images={images}
+          onClose={() => setOpen(null)}
+          onPlanned={() => mealPlan(startOfDay(new Date())).then(setPlan)}
+        />
+      )}
     </div>
   );
 }
 
-function RecipeDetail({ slug, images, onClose, onPlanned }: { slug: string; images: boolean; onClose: () => void; onPlanned: () => void }) {
+function RecipeDetail({ slug, source, images, onClose, onPlanned }: { slug: string; source: Source; images: boolean; onClose: () => void; onPlanned: () => void }) {
   const { entities } = useHa();
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -159,8 +207,8 @@ function RecipeDetail({ slug, images, onClose, onPlanned }: { slug: string; imag
   const [list, setList] = useState('');
 
   useEffect(() => {
-    getRecipe(slug).then(setRecipe).catch((e) => setErr((e as Error).message));
-  }, [slug]);
+    (source === 'bar' ? barCocktail(slug) : getRecipe(slug)).then(setRecipe).catch((e) => setErr((e as Error).message));
+  }, [slug, source]);
 
   if (cooking && recipe) return <CookMode recipe={recipe} onClose={() => setCooking(false)} />;
 
@@ -204,6 +252,9 @@ function RecipeDetail({ slug, images, onClose, onPlanned }: { slug: string; imag
             <div className="recipe-hero-text">
               {recipe.description && <p>{recipe.description}</p>}
               <div className="recipe-meta">
+                {recipe.extras?.map((x) => (
+                  <span key={x}>{x}</span>
+                ))}
                 {recipe.time && (
                   <span>
                     <Clock size={16} /> {recipe.time}
@@ -217,11 +268,13 @@ function RecipeDetail({ slug, images, onClose, onPlanned }: { slug: string; imag
               </div>
               <div className="recipe-actions">
                 <button className="btn primary big-btn" onClick={() => setCooking(true)} disabled={!recipe.steps.length && !recipe.ingredients.length}>
-                  <ChefHat size={20} /> {t('Start cooking')}
+                  {source === 'bar' ? <Wine size={20} /> : <ChefHat size={20} />} {source === 'bar' ? t('Start mixing') : t('Start cooking')}
                 </button>
+{source === 'mealie' && (
                 <button className={`btn ${panel === 'plan' ? 'on' : ''}`} onClick={() => setPanel(panel === 'plan' ? null : 'plan')}>
                   <CalendarPlus size={18} /> {t('Add to meal plan')}
                 </button>
+                )}
                 <button className={`btn ${panel === 'list' ? 'on' : ''}`} onClick={() => setPanel(panel === 'list' ? null : 'list')}>
                   <ListPlus size={18} /> {t('Add ingredients to list')}
                 </button>

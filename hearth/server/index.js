@@ -15,7 +15,7 @@ const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.6.0';
+const VERSION = process.env.HEARTH_VERSION || '0.7.0';
 
 // Add-on options (set on the add-on's Configuration tab in Home Assistant).
 let options = {};
@@ -37,6 +37,12 @@ function resolvePhotoDir() {
 const PHOTO_DIR = resolvePhotoDir();
 // Optional: your Mealie server's address, used only to show recipe photos.
 const MEALIE_URL = String(process.env.MEALIE_URL || options.mealie_url || '').trim().replace(/\/+$/, '');
+// Optional: Bar Assistant (cocktail recipes). Talks to its API directly with a personal access token.
+const BAR = {
+  url: String(process.env.BAR_ASSISTANT_URL || options.bar_assistant_url || '').trim().replace(/\/+$/, ''),
+  token: String(process.env.BAR_ASSISTANT_TOKEN || options.bar_assistant_token || '').trim(),
+  barId: String(process.env.BAR_ASSISTANT_BAR_ID || options.bar_assistant_bar_id || '').trim(),
+};
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 try {
@@ -125,6 +131,7 @@ const SERVICES = new Set([
   'media_player.volume_set',
   'media_player.volume_mute',
   'media_player.shuffle_set',
+  'media_player.repeat_set',
   'music_assistant.get_library',
   'music_assistant.play_media',
   'light.toggle',
@@ -361,6 +368,86 @@ async function route(req, res) {
     if (!img.ok) return send(res, img.status, 'Image unavailable');
     return send(res, 200, Buffer.from(await img.arrayBuffer()), { 'Content-Type': img.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'max-age=3600' });
   }
+  // --- Bar Assistant (cocktails) ---
+  if (p === '/api/bar/cocktails' && m === 'GET') {
+    const q = (url.searchParams.get('q') || '').trim();
+    if (!BAR.url) return mock ? send(res, 200, mock.cocktails(q)) : send(res, 404, { error: 'Bar Assistant is not set up' });
+    const params = new URLSearchParams({ per_page: '60', include: 'images,ingredients' });
+    if (q) params.set('filter[name]', q);
+    const r = await bar(`/cocktails?${params}`);
+    return send(res, 200, (r.data ?? []).map(cocktailSummary));
+  }
+  match = p.match(/^\/api\/bar\/cocktails\/([\w-]{1,120})$/);
+  if (match && m === 'GET') {
+    if (!BAR.url) return mock ? send(res, 200, mock.cocktail(match[1])) : send(res, 404, { error: 'Bar Assistant is not set up' });
+    const r = await bar(`/cocktails/${match[1]}`);
+    return send(res, 200, cocktailFull(r.data ?? r));
+  }
+  if (p === '/api/bar/image' && m === 'GET') {
+    const u = url.searchParams.get('u') || '';
+    if (u.startsWith('mock:') && mock) return send(res, 200, mock.cocktailArt(u.slice(5)), { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'max-age=3600' });
+    if (!BAR.url || new URL(u, BAR.url).origin !== new URL(BAR.url).origin) return send(res, 400, 'Bad image');
+    const img = await fetch(new URL(u, BAR.url), { headers: { Authorization: `Bearer ${BAR.token}` }, signal: AbortSignal.timeout(15000) });
+    if (!img.ok) return send(res, img.status, 'No photo');
+    return send(res, 200, Buffer.from(await img.arrayBuffer()), { 'Content-Type': img.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'max-age=86400' });
+  }
+
+  // --- place suggestions for event locations (Photon / OpenStreetMap), biased to home ---
+  if (p === '/api/places' && m === 'GET') {
+    const q = (url.searchParams.get('q') || '').trim().slice(0, 120);
+    if (q.length < 3) return send(res, 200, []);
+    if (mock) return send(res, 200, mock.places(q));
+    if (!homeLoc) {
+      const c = await ha('GET', '/config').catch(() => null);
+      homeLoc = c?.data?.latitude != null ? { lat: c.data.latitude, lon: c.data.longitude } : {};
+    }
+    const params = new URLSearchParams({ q, limit: '6' });
+    if (homeLoc.lat != null) {
+      params.set('lat', String(homeLoc.lat));
+      params.set('lon', String(homeLoc.lon));
+    }
+    try {
+      const r = await fetch(`https://photon.komoot.io/api/?${params}`, {
+        headers: { 'User-Agent': `Hearth-HomeAssistant-addon/${VERSION}` },
+        signal: AbortSignal.timeout(8000),
+      });
+      const data = await r.json();
+      const out = (data.features ?? []).map((f) => {
+        const pr = f.properties ?? {};
+        const street = [pr.housenumber, pr.street].filter(Boolean).join(' ');
+        const label = pr.name || street || pr.city || q;
+        const sub = [pr.name ? street : '', pr.city && pr.city !== label ? pr.city : '', pr.state, pr.country]
+          .filter(Boolean)
+          .join(', ');
+        return { label, sub };
+      });
+      return send(res, 200, out);
+    } catch {
+      return send(res, 200, []);
+    }
+  }
+
+  // --- what's connected (Settings → Integrations) ---
+  if (p === '/api/integrations' && m === 'GET') {
+    const [entries, states, targets] = await Promise.all([
+      ha('GET', '/config/config_entries/entry').catch(() => ({ data: [] })),
+      ha('GET', '/states').catch(() => ({ data: [] })),
+      notifyTargets().catch(() => []),
+    ]);
+    const domains = new Set((Array.isArray(entries.data) ? entries.data : []).filter((e) => e.state === 'loaded').map((e) => e.domain));
+    const st = Array.isArray(states.data) ? states.data : [];
+    const count = (d) => st.filter((x) => x.entity_id.startsWith(d + '.')).length;
+    return send(res, 200, {
+      mode,
+      domains: [...domains],
+      counts: { calendar: count('calendar'), todo: count('todo'), weather: count('weather'), media_player: count('media_player'), notify: targets.length },
+      grocy: domains.has('grocy') || st.some((x) => x.entity_id.startsWith('sensor.grocy_')),
+      taskmate: domains.has('taskmate') || st.some((x) => x.entity_id.endsWith('_overview') && Array.isArray(x.attributes?.children)),
+      barAssistant: Boolean(BAR.url) || Boolean(mock),
+      mealieImages: Boolean(MEALIE_URL) || Boolean(mock),
+    });
+  }
+
   // Mealie integration's config entry id (needed for every mealie.* service).
   if (p === '/api/ha/mealie' && m === 'GET') {
     const r = await ha('GET', '/config/config_entries/entry?domain=mealie');
@@ -479,6 +566,61 @@ const server = http.createServer((req, res) => {
   });
 });
 
+
+
+let homeLoc = null;
+
+// ---------- Bar Assistant ----------
+const barApi = () => (BAR.url.endsWith('/api') ? BAR.url : `${BAR.url}/api`);
+let barIdCache = BAR.barId || null;
+async function barFetch(path_, withBar) {
+  const res = await fetch(barApi() + path_, {
+    headers: {
+      Authorization: `Bearer ${BAR.token}`,
+      Accept: 'application/json',
+      ...(withBar && barIdCache ? { 'Bar-Assistant-Bar-Id': barIdCache } : {}),
+    },
+    signal: AbortSignal.timeout(15000),
+  });
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { message: text.slice(0, 200) };
+  }
+  if (!res.ok) throw Object.assign(new Error(`Bar Assistant: ${data?.message || res.status}`), { status: 502 });
+  return data;
+}
+async function bar(path_) {
+  if (!barIdCache) {
+    const bars = await barFetch('/bars', false);
+    barIdCache = String(bars.data?.[0]?.id ?? '');
+    if (!barIdCache) throw Object.assign(new Error('No bars found in Bar Assistant'), { status: 502 });
+  }
+  return barFetch(path_, true);
+}
+const barImage = (c) => {
+  const img = c.images?.[0] ?? c.main_image ?? null;
+  const u = img?.url || img?.thumb_url || c.image_url || null;
+  return u ? `api/bar/image?u=${encodeURIComponent(u)}` : null;
+};
+const cocktailSummary = (c) => ({ id: String(c.slug || c.id), name: c.name, description: c.description || null, image: barImage(c) });
+const cocktailFull = (c) => ({
+  ...cocktailSummary(c),
+  garnish: c.garnish || null,
+  glass: c.glass?.name || null,
+  method: c.method?.name || null,
+  instructions: c.instructions || '',
+  ingredients: (c.ingredients ?? []).map((i) => ({
+    name: i.ingredient?.name ?? i.name ?? '',
+    amount: i.amount ?? null,
+    amount_max: i.amount_max ?? null,
+    units: i.units ?? i.unit ?? '',
+    optional: Boolean(i.optional),
+    note: i.note || null,
+  })),
+});
 
 // ---------- notifications (runs in the add-on, so phones get one alert, not one per tablet) ----------
 const pad2 = (n) => String(n).padStart(2, '0');

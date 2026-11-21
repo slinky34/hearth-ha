@@ -2,12 +2,13 @@ import { addDays, addMonths, addWeeks, differenceInCalendarDays, endOfMonth, end
 import { ChevronLeft, ChevronRight, Clock, MapPin, Plus, RefreshCw } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent } from 'react';
 import { Modal } from '../components/Modal';
-import { api } from '../lib/api';
+import { api, whoLine } from '../lib/api';
+import { toast } from '../components/Toast';
 import { useEvents, useHa } from '../lib/ha';
 import { useNow } from '../lib/hooks';
 import { useStore } from '../lib/store';
 import type { CalEvent, CalendarViewMode, Member } from '../lib/types';
-import { dateKey, dueOn, fmtShortTime, fmtTime, initials, pastel, stripes } from '../lib/util';
+import { dateKey, dueOn, eventMembers, fmtShortTime, fmtTime, initials, pastel, stripes } from '../lib/util';
 import { useWeather, weatherIcon } from '../lib/weather';
 import { dateLong, dateMedium, dateShort, format, monthYear, t } from '../lib/i18n';
 
@@ -26,7 +27,7 @@ export function useEventLook() {
   const { members } = useStore().data;
   const { colorOf } = useHa();
   return (e: CalEvent) => {
-    const who = members.filter((m) => m.calendars.includes(e.calendar));
+    const who = eventMembers(e, members);
     const colors = who.length ? who.map((m) => m.color) : [colorOf(e.calendar)];
     const style: CSSProperties = colors.length > 1 ? { background: stripes(colors) } : { background: pastel(colors[0], 0.42) };
     return { who, style, color: colors[0] };
@@ -95,7 +96,7 @@ export function MemberStrip() {
 
 export function CalendarView() {
   const { data } = useStore();
-  const { visibleCalendars, calendars, error: haError } = useHa();
+  const { visibleCalendars, calendars, selected, error: haError } = useHa();
   const { weekStartsOn, gridDays } = data.settings;
   const [mode, setMode] = useState<CalendarViewMode>(data.settings.calendarView);
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
@@ -113,7 +114,14 @@ export function CalendarView() {
     return { start, end: startOfDay(addDays(endOfWeek(endOfMonth(cursor), { weekStartsOn }), 1)) };
   }, [mode, cursor, weekStartsOn, gridDays]);
 
-  const { events, error, loading, reload } = useEvents(visibleCalendars, range.start, range.end);
+  const { events: allEvents, error, loading, reload } = useEvents(visibleCalendars, range.start, range.end);
+  // With people selected, hide shared-calendar events tagged only for someone else.
+  const events = selected.length
+    ? allEvents.filter((e) => {
+        const w = eventMembers(e, data.members);
+        return w.length === 0 || w.some((m) => selected.includes(m.id));
+      })
+    : allEvents;
 
   const step = (dir: 1 | -1) =>
     setCursor((c) =>
@@ -518,8 +526,7 @@ function TimeGrid({ days, events, onPick }: ViewProps & { days: Date[] }) {
 export function EventDetail({ event: e, onClose }: { event: CalEvent; onClose: () => void }) {
   const { colorOf, calendars } = useHa();
   const { members, settings } = useStore().data;
-  const cal = calendars.find((c) => c.entity_id === e.calendar);
-  const who = members.filter((m) => m.calendars.includes(e.calendar));
+  const who = eventMembers(e, members);
   const lastDay = addDays(e.end, -1);
   return (
     <Modal title={e.title} onClose={onClose}>
@@ -540,9 +547,18 @@ export function EventDetail({ event: e, onClose }: { event: CalEvent; onClose: (
         )}
         <p>
           <i className="dot" style={{ background: colorOf(e.calendar) }} />
-          {cal?.name ?? e.calendar}
-          {who.length > 0 && <span className="muted"> · {who.map((m) => m.name).join(', ')}</span>}
+          {e.calendars.map((c) => calendars.find((x) => x.entity_id === c)?.name ?? c).join(', ')}
         </p>
+        {who.length > 0 && (
+          <p className="who-row">
+            {who.map((m) => (
+              <span key={m.id} className="member-chip" style={{ background: pastel(m.color, 0.45) }}>
+                <span className="badge" style={{ background: m.color }}>{initials(m.name).slice(0, 1)}</span>
+                {m.name}
+              </span>
+            ))}
+          </p>
+        )}
         {e.description && <p className="desc">{e.description}</p>}
       </div>
     </Modal>
@@ -552,12 +568,11 @@ export function EventDetail({ event: e, onClose }: { event: CalEvent; onClose: (
 export function AddEvent({ defaultDate, onClose, onCreated }: { defaultDate: Date; onClose: () => void; onCreated: () => void }) {
   const { calendars, selected, colorOf } = useHa();
   const { members, settings } = useStore().data;
-  const preferred =
-    members.find((m) => selected.includes(m.id))?.calendars[0] ??
-    calendars.find((c) => !settings.hiddenCalendars.includes(c.entity_id))?.entity_id ??
-    '';
+  const usable = calendars.filter((c) => !settings.hiddenCalendars.includes(c.entity_id));
+  const preferred = members.find((m) => selected.includes(m.id))?.calendars[0] ?? usable[0]?.entity_id;
   const [title, setTitle] = useState('');
-  const [cal, setCal] = useState(preferred);
+  const [cals, setCals] = useState<string[]>(preferred ? [preferred] : []);
+  const [people, setPeople] = useState<string[]>(selected);
   const [allDay, setAllDay] = useState(false);
   const [date, setDate] = useState(format(defaultDate, 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(defaultDate, 'yyyy-MM-dd'));
@@ -568,28 +583,50 @@ export function AddEvent({ defaultDate, onClose, onCreated }: { defaultDate: Dat
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const toggle = (list: string[], set: (v: string[]) => void, id: string) =>
+    set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+
+  // People already covered by a chosen calendar don't need tagging.
+  const coveredByCalendar = (memberId: string) => {
+    const m = members.find((x) => x.id === memberId);
+    return !!m && m.calendars.some((c) => cals.includes(c));
+  };
+
   const save = async () => {
     setErr(null);
     if (!title.trim()) return setErr(t('Give the event a name.'));
-    const data: Record<string, string> = { entity_id: cal, summary: title.trim() };
-    if (location.trim()) data.location = location.trim();
+    if (!cals.length) return setErr(t('Pick at least one calendar.'));
+    const base: Record<string, string> = { summary: title.trim() };
+    if (location.trim()) base.location = location.trim();
+    const tagged = members.filter((m) => people.includes(m.id) && !coveredByCalendar(m.id)).map((m) => m.name);
+    if (tagged.length) base.description = whoLine(tagged);
     if (allDay) {
       if (endDate < date) return setErr(t('End date is before the start date.'));
-      data.start_date = date;
-      data.end_date = format(addDays(parseISO(endDate), 1), 'yyyy-MM-dd');
+      base.start_date = date;
+      base.end_date = format(addDays(parseISO(endDate), 1), 'yyyy-MM-dd');
     } else {
       if (endT <= startT) return setErr(t('End time must be after the start time.'));
-      data.start_date_time = `${date} ${startT}:00`;
-      data.end_date_time = `${date} ${endT}:00`;
+      base.start_date_time = `${date} ${startT}:00`;
+      base.end_date_time = `${date} ${endT}:00`;
     }
     setBusy(true);
-    try {
-      await api.service('calendar', 'create_event', data);
-      onCreated();
-    } catch (e) {
-      setErr(t('Couldn’t create the event: {error}. Some calendars (like subscribed ICS feeds) are read-only.', { error: (e as Error).message }));
-      setBusy(false);
+    const failed: string[] = [];
+    let lastError = '';
+    for (const cal of cals) {
+      try {
+        await api.service('calendar', 'create_event', { entity_id: cal, ...base });
+      } catch (e) {
+        failed.push(calendars.find((c) => c.entity_id === cal)?.name ?? cal);
+        lastError = (e as Error).message;
+      }
     }
+    if (failed.length === cals.length) {
+      setErr(t('Couldn’t create the event: {error}. Some calendars (like subscribed ICS feeds) are read-only.', { error: lastError }));
+      setBusy(false);
+      return;
+    }
+    if (failed.length) toast(t('Not added to: {names}', { names: failed.join(', ') }));
+    onCreated();
   };
 
   return (
@@ -610,22 +647,53 @@ export function AddEvent({ defaultDate, onClose, onCreated }: { defaultDate: Dat
       <div className="form">
         <input autoFocus className="big" placeholder={t('What’s happening?')} value={title} onChange={(e) => setTitle(e.target.value)} />
         <label>
-          {t('Calendar')}
+          <span>
+            {t('Calendars')} <span className="muted small">· {t('pick one or more')}</span>
+          </span>
           <div className="chips">
-            {calendars
-              .filter((c) => !settings.hiddenCalendars.includes(c.entity_id))
-              .map((c) => (
+            {usable.map((c) => {
+              const on = cals.includes(c.entity_id);
+              return (
                 <button
                   key={c.entity_id}
-                  className={`chip ${cal === c.entity_id ? 'on' : ''}`}
-                  style={cal === c.entity_id ? { background: colorOf(c.entity_id), borderColor: colorOf(c.entity_id) } : {}}
-                  onClick={() => setCal(c.entity_id)}
+                  className={`chip ${on ? 'on' : ''}`}
+                  style={on ? { background: colorOf(c.entity_id), borderColor: colorOf(c.entity_id) } : {}}
+                  onClick={() => toggle(cals, setCals, c.entity_id)}
+                  aria-pressed={on}
                 >
+                  {on && '✓ '}
                   {c.name}
                 </button>
-              ))}
+              );
+            })}
           </div>
         </label>
+        {members.length > 0 && (
+          <label>
+            {t('Who’s going?')}
+            <div className="chips">
+              {members.map((m) => {
+                const viaCal = coveredByCalendar(m.id);
+                const on = viaCal || people.includes(m.id);
+                return (
+                  <button
+                    key={m.id}
+                    className={`chip person ${on ? 'on' : ''}`}
+                    style={on ? { background: m.color, borderColor: m.color } : {}}
+                    onClick={() => !viaCal && toggle(people, setPeople, m.id)}
+                    title={viaCal ? t('Included through their calendar') : undefined}
+                    aria-pressed={on}
+                  >
+                    <span className="badge" style={{ background: m.color }}>
+                      {initials(m.name).slice(0, 1)}
+                    </span>
+                    {m.name}
+                  </button>
+                );
+              })}
+            </div>
+          </label>
+        )}
         <label className="row">
           <input type="checkbox" checked={allDay} onChange={(e) => setAllDay(e.target.checked)} /> {t('All day')}
         </label>
@@ -652,9 +720,64 @@ export function AddEvent({ defaultDate, onClose, onCreated }: { defaultDate: Dat
             </>
           )}
         </div>
-        <input placeholder={t('Location (optional)')} value={location} onChange={(e) => setLocation(e.target.value)} />
+        <LocationInput value={location} onChange={setLocation} />
         {err && <p className="error">{err}</p>}
       </div>
     </Modal>
+  );
+}
+
+/** Location box with place suggestions (looked up by the add-on). */
+function LocationInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [hits, setHits] = useState<{ label: string; sub?: string }[]>([]);
+  const [open, setOpen] = useState(false);
+  const picked = useRef('');
+  useEffect(() => {
+    const q = value.trim();
+    if (q.length < 3 || q === picked.current) return setHits([]);
+    const id = setTimeout(() => {
+      fetch(`api/places?${new URLSearchParams({ q })}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((l) => {
+          setHits(l);
+          setOpen(true);
+        })
+        .catch(() => setHits([]));
+    }, 350);
+    return () => clearTimeout(id);
+  }, [value]);
+  return (
+    <div className="location-box">
+      <label className="search-box">
+        <MapPin size={18} />
+        <input
+          placeholder={t('Location (optional)')}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+        />
+      </label>
+      {open && hits.length > 0 && (
+        <div className="picker-results">
+          {hits.map((h, i) => (
+            <button
+              key={i}
+              onMouseDown={(ev) => ev.preventDefault()}
+              onClick={() => {
+                const v = h.sub ? `${h.label}, ${h.sub}` : h.label;
+                picked.current = v;
+                onChange(v);
+                setHits([]);
+                setOpen(false);
+              }}
+            >
+              <b>{h.label}</b>
+              {h.sub && <span className="muted small">{h.sub}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

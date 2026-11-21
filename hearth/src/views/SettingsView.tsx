@@ -6,6 +6,8 @@ import { useKiosk } from '../lib/kiosk';
 import { LANGUAGES, t } from '../lib/i18n';
 import { PALETTES, swatch } from '../lib/themes';
 import { CONTROL_DOMAINS } from './HomeView';
+import { EntityPicker } from '../components/EntityPicker';
+import { Integrations } from '../components/Integrations';
 import { useStore } from '../lib/store';
 import type { Member, Settings } from '../lib/types';
 import { PALETTE, initials, uid } from '../lib/util';
@@ -22,7 +24,6 @@ export function SettingsView() {
   const weathers = entities.filter((e) => e.entity_id.startsWith('weather.'));
   const players = entities.filter((e) => e.entity_id.startsWith('media_player.'));
   const controllable = entities.filter((e) => CONTROL_DOMAINS.includes(e.entity_id.split('.')[0]));
-  const [q, setQ] = useState('');
   const n = (patch: Partial<Settings['notify']>) => set('settings', (p) => ({ ...p, notify: { ...p.notify, ...patch } }));
   const [targets, setTargets] = useState<string[]>([]);
   const [tested, setTested] = useState('');
@@ -160,21 +161,13 @@ export function SettingsView() {
       <section className="card">
         <h2>{t('Lists')}</h2>
         <p className="muted small">{t('Choose which Home Assistant to-do lists appear. None selected shows all of them.')}</p>
-        <div className="chips">
-          {todos.map((t) => {
-            const on = settings.lists.includes(t.entity_id);
-            return (
-              <button
-                key={t.entity_id}
-                className={`chip ${on ? 'on' : ''}`}
-                onClick={() => s('lists', on ? settings.lists.filter((x) => x !== t.entity_id) : [...settings.lists, t.entity_id])}
-              >
-                {t.name}
-              </button>
-            );
-          })}
-          {todos.length === 0 && <span className="muted">{t('No to-do entities found.')}</span>}
-        </div>
+        <EntityPicker
+          entities={todos}
+          selected={settings.lists}
+          onChange={(v) => s('lists', v)}
+          placeholder={t('Search lists…')}
+          emptyHint={todos.length ? t('Showing every list.') : t('No to-do entities found.')}
+        />
       </section>
 
       <section className="card">
@@ -384,17 +377,13 @@ export function SettingsView() {
       <section className="card">
         <h2>{t('Music')}</h2>
         <p className="muted small">{t('Speakers to show. None selected shows every media player (Sonos, Music Assistant, Cast, Spotify…).')}</p>
-        <div className="chips">
-          {players.map((p) => {
-            const on = settings.musicPlayers.includes(p.entity_id);
-            return (
-              <button key={p.entity_id} className={`chip ${on ? 'on' : ''}`} onClick={() => s('musicPlayers', on ? settings.musicPlayers.filter((x) => x !== p.entity_id) : [...settings.musicPlayers, p.entity_id])}>
-                {p.name}
-              </button>
-            );
-          })}
-          {players.length === 0 && <span className="muted">{t('No media players found.')}</span>}
-        </div>
+        <EntityPicker
+          entities={players}
+          selected={settings.musicPlayers}
+          onChange={(v) => s('musicPlayers', v)}
+          placeholder={t('Search speakers…')}
+          emptyHint={players.length ? t('Showing every speaker.') : t('No media players found.')}
+        />
       </section>
 
       <section className="card">
@@ -402,22 +391,13 @@ export function SettingsView() {
         <p className="muted small">
           {t('Lights, switches, fans, scenes, scripts, and sensors for the Home screen. Locks, alarms, and garage doors are intentionally not controllable from a wall display.')}
         </p>
-        <input placeholder={t('Search entities…')} value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 320 }} />
-        <div className="chips">
-          {controllable
-            .filter((e) => settings.controls.includes(e.entity_id) || (q && `${e.name} ${e.entity_id}`.toLowerCase().includes(q.toLowerCase())))
-            .slice(0, 60)
-            .map((e) => {
-              const on = settings.controls.includes(e.entity_id);
-              return (
-                <button key={e.entity_id} className={`chip small ${on ? 'on' : ''}`} onClick={() => s('controls', on ? settings.controls.filter((x) => x !== e.entity_id) : [...settings.controls, e.entity_id])}>
-                  {on ? '✓ ' : '+ '}
-                  {e.name}
-                </button>
-              );
-            })}
-          {!q && settings.controls.length === 0 && <span className="muted small">{t('Search above to add entities.')}</span>}
-        </div>
+        <EntityPicker
+          entities={controllable}
+          selected={settings.controls}
+          onChange={(v) => s('controls', v)}
+          placeholder={t('Search entities…')}
+          emptyHint={t('Search above to add entities.')}
+        />
       </section>
 
       <section className="card">
@@ -450,6 +430,8 @@ export function SettingsView() {
           </button>
         </div>
       </section>
+
+      <Integrations />
 
       <section className="card">
         <h2>{t('About')}</h2>

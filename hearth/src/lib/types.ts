@@ -117,6 +117,10 @@ export interface CalEvent {
   end: Date;
   allDay: boolean;
   calendar: string;
+  /** Every calendar this event appears in (identical events across calendars are merged). */
+  calendars: string[];
+  /** Names from a "Who: …" line in the description (people tagged on a shared calendar). */
+  people: string[];
   location?: string;
   description?: string;
 }
