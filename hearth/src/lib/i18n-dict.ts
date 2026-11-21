@@ -594,6 +594,7 @@ export const DICT: Record<string, string[]> = {
   "First chosen camera": ["Erste gewählte Kamera", "Primera cámara elegida", "Première caméra choisie", "Prima telecamera scelta", "最初に選んだカメラ", "처음 선택한 카메라", "Eerste gekozen camera", "Primeira câmera escolhida"],
   "Show latest detections next to it": ["Neueste Erkennungen daneben zeigen", "Mostrar las últimas detecciones al lado", "Afficher les dernières détections à côté", "Mostra accanto gli ultimi rilevamenti", "最新の検出を横に表示", "최근 감지를 옆에 표시", "Laatste detecties ernaast tonen", "Mostrar as últimas detecções ao lado"],
   "Open live view": ["Live-Ansicht öffnen", "Abrir vista en vivo", "Ouvrir le direct", "Apri vista live", "ライブビューを開く", "실시간 보기 열기", "Liveweergave openen", "Abrir ao vivo"],
+  "Not shown:": ["Ausgeblendet:", "No se muestran:", "Non affichées :", "Non mostrate:", "非表示:", "숨김:", "Niet getoond:", "Ocultas:"],
   "Remove": ["Entfernen", "Quitar", "Retirer", "Rimuovi", "削除", "삭제", "Verwijderen", "Remover"],
   "Note": ["Notiz", "Nota", "Note", "Nota", "メモ", "메모", "Notitie", "Recado"],
   "New note": ["Neue Notiz", "Nueva nota", "Nouvelle note", "Nuova nota", "新しいメモ", "새 메모", "Nieuwe notitie", "Novo recado"],

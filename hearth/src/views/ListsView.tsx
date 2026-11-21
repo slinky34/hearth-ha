@@ -28,11 +28,15 @@ export function readableItem(summary: string): { text: string; raw: boolean } {
 }
 
 export function ListsView() {
-  const { settings } = useStore().data;
+  const { data, set } = useStore();
+  const { settings } = data;
   const { entities, error } = useHa();
   const { grocy, reload: reloadGrocy } = useGrocy();
   const todos = entities.filter((e) => e.entity_id.startsWith('todo.'));
   const shown = settings.lists.length ? todos.filter((t) => settings.lists.includes(t.entity_id)) : todos;
+  // Lists added in HA after you picked lists (e.g. a new AnyList list) would stay hidden; offer them here.
+  const notShown = settings.lists.length ? todos.filter((t) => !settings.lists.includes(t.entity_id)) : [];
+  const showList = (id: string) => set('settings', (prev) => ({ ...prev, lists: [...prev.lists, id] }));
 
   return (
     <div className="lists">
@@ -43,6 +47,16 @@ export function ListsView() {
       {shown.length === 0 && !grocy.shopping && !error && (
         <div className="empty">
           {t('No lists found. Add Shopping List, Local To-do, AnyList, Todoist, or Grocy in Home Assistant, then pick lists in Settings.')}
+        </div>
+      )}
+      {notShown.length > 0 && (
+        <div className="more-lists">
+          <span className="muted small">{t('Not shown:')}</span>
+          {notShown.map((l) => (
+            <button key={l.entity_id} className="chip small" onClick={() => showList(l.entity_id)}>
+              + {l.name}
+            </button>
+          ))}
         </div>
       )}
       <div className="list-grid">

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.1
+- **Recipes meal plan:** meals you removed or replaced on the Meals screen no longer show under Recipes → Meal plan.
+- **New lists show up:** if you've picked specific lists in Settings, lists added to Home Assistant later (like a new AnyList list) appear in a "Not shown" row at the top of Lists. Tap one to add it.
+
 ## 0.15.0
 - **Frigate live view:** Frigate's own cameras appear on the Cameras screen and stream live straight from Frigate, which is smoother than going through Home Assistant. With no cameras chosen, every Frigate camera shows.
 - **Live camera on Today:** a camera column on Today with live video and the latest detections. Tap the video for full screen, or a detection for its snapshot. Choose the camera, or turn it off, under Settings → Cameras → Today screen.

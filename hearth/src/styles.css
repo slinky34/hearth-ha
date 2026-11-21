@@ -1079,3 +1079,4 @@ button.meal-label { text-align: left; align-items: flex-start; }
   .today-split:has(> .cam-col) { grid-auto-columns: minmax(200px, 1fr); }
   .cam-col .person-head h2 { font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 }
+.more-lists { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -4px 0 14px; }

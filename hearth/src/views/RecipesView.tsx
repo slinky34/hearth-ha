@@ -2,6 +2,8 @@ import { isToday, parseISO, startOfDay } from 'date-fns';
 import { CalendarPlus, ChefHat, Wine, ChevronLeft, ChevronRight, Clock, ExternalLink, ListPlus, Search, Timer as TimerIcon, Users, X } from 'lucide-react';
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
 import { Modal } from '../components/Modal';
+import { useStore } from '../lib/store';
+import type { MealType } from '../lib/types';
 import { toast } from '../components/Toast';
 import { useTimers } from '../components/Timers';
 import { api } from '../lib/api';
@@ -42,6 +44,13 @@ export function RecipesView({ openSlug, onOpened }: { openSlug?: string | null; 
   const [source, setSource] = useState<Source>('mealie');
   const [images, setImages] = useState(false);
   const [plan, setPlan] = useState<PlanEntry[]>([]);
+  // Hide entries removed (or replaced with a Hearth meal) on the Meals screen.
+  const { meals } = useStore().data;
+  const visiblePlan = plan.filter((p) => {
+    const slot = (p.type === 'side' ? 'dinner' : p.type) as MealType;
+    const day = meals[p.date];
+    return !day?.hide?.includes(slot) && !day?.[slot];
+  });
   const [results, setResults] = useState<RecipeSummary[] | null>(null);
   const [noSearch, setNoSearch] = useState(false);
   const [q, setQ] = useState('');
@@ -141,11 +150,11 @@ export function RecipesView({ openSlug, onOpened }: { openSlug?: string | null; 
       </div>
 
       <div className="recipes-scroll">
-        {source === 'mealie' && plan.length > 0 && !q && (
+        {source === 'mealie' && visiblePlan.length > 0 && !q && (
           <section>
             <h3 className="today-label">{t('Meal plan')}</h3>
             <div className="plan-row">
-              {plan.map((p, i) => (
+              {visiblePlan.map((p, i) => (
                 <button key={i} className="plan-card" onClick={() => p.recipe && setOpen({ id: p.recipe.slug, source: 'mealie' })} disabled={!p.recipe}>
                   {p.recipe ? <RecipeImage r={p.recipe} images={images} /> : <span className="recipe-img placeholder">{TYPE_ICON[p.type] ?? '🍽️'}</span>}
                   <span className="plan-when">
