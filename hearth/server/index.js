@@ -15,7 +15,7 @@ const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.15.1';
+const VERSION = process.env.HEARTH_VERSION || '0.15.2';
 
 // Add-on options (set on the add-on's Configuration tab in Home Assistant).
 let options = {};
@@ -45,6 +45,11 @@ const IMMICH = {
 };
 // Optional: Frigate NVR API (unauthenticated port, e.g. http://ccab4aaf-frigate:5000 for the HA add-on).
 const FRIGATE_URL = String(process.env.FRIGATE_URL || options.frigate_url || '').trim().replace(/\/+$/, '').replace(/\/api$/, '');
+// Optional: Grocy's own API (for the Grocy add-on without the HA integration). Found automatically if it's an add-on.
+const GROCY = {
+  url: String(process.env.GROCY_URL || options.grocy_url || '').trim().replace(/\/+$/, '').replace(/\/api$/, ''),
+  key: String(process.env.GROCY_API_KEY || options.grocy_api_key || '').trim(),
+};
 const BAR = {
   url: String(process.env.BAR_ASSISTANT_URL || options.bar_assistant_url || '').trim().replace(/\/+$/, ''),
   token: String(process.env.BAR_ASSISTANT_TOKEN || options.bar_assistant_token || '').trim(),
@@ -599,17 +604,58 @@ async function route(req, res) {
     }
   }
 
+  // --- Grocy (direct API, for the add-on without the HA integration) ---
+  if (p === '/api/grocy/status' && m === 'GET') return send(res, 200, await grocyStatus());
+  if (p === '/api/grocy/data' && m === 'GET') {
+    try {
+      return send(res, 200, await grocyData());
+    } catch (e) {
+      return send(res, 502, { error: e.message });
+    }
+  }
+  if (p === '/api/grocy/shopping' && m === 'POST') {
+    const b = await readJson(req);
+    const note = String(b.note || '').trim().slice(0, 200);
+    if (!note) return send(res, 400, { error: 'Empty item' });
+    try {
+      await grocyApi('POST', '/objects/shopping_list', { note, amount: 1, shopping_list_id: 1 });
+      return send(res, 200, { ok: true });
+    } catch (e) {
+      return send(res, 502, { error: e.message });
+    }
+  }
+  match = p.match(/^\/api\/grocy\/shopping\/(\d+)$/);
+  if (match && m === 'PUT') {
+    const b = await readJson(req);
+    try {
+      await grocyApi('PUT', `/objects/shopping_list/${match[1]}`, { done: b.done ? 1 : 0 });
+      return send(res, 200, { ok: true });
+    } catch (e) {
+      return send(res, 502, { error: e.message });
+    }
+  }
+  match = p.match(/^\/api\/grocy\/chores\/(\d+)\/execute$/);
+  if (match && m === 'POST') {
+    try {
+      await grocyApi('POST', `/chores/${match[1]}/execute`, {});
+      return send(res, 200, { ok: true });
+    } catch (e) {
+      return send(res, 502, { error: e.message });
+    }
+  }
+
   // Which entities belong to an integration (Grocy's sensor names vary).
   match = p.match(/^\/api\/integration_entities\/(grocy)$/);
   if (match && m === 'GET') return send(res, 200, await integrationEntities(match[1]).catch(() => []));
 
   // --- what's connected (Settings → Integrations) ---
   if (p === '/api/integrations' && m === 'GET') {
-    const [domains, states, targets, grocyEnts] = await Promise.all([
+    const [domains, states, targets, grocyEnts, grocyDirect] = await Promise.all([
       loadedDomains().catch(() => new Set()),
       ha('GET', '/states').catch(() => ({ data: [] })),
       notifyTargets().catch(() => []),
       integrationEntities('grocy').catch(() => []),
+      grocyStatus().catch(() => ({ configured: false, ok: false })),
     ]);
     const st = Array.isArray(states.data) ? states.data : [];
     const count = (d) => st.filter((x) => x.entity_id.startsWith(d + '.')).length;
@@ -617,7 +663,8 @@ async function route(req, res) {
       mode,
       domains: [...domains],
       counts: { calendar: count('calendar'), todo: count('todo'), weather: count('weather'), media_player: count('media_player'), notify: targets.length },
-      grocy: domains.has('grocy') || grocyEnts.length > 0 || st.some((x) => x.entity_id.startsWith('sensor.grocy_')),
+      grocy: domains.has('grocy') || grocyEnts.length > 0 || st.some((x) => x.entity_id.startsWith('sensor.grocy_')) || grocyDirect.ok,
+      grocyDirect,
       taskmate: domains.has('taskmate') || st.some((x) => x.entity_id.endsWith('_overview') && Array.isArray(x.attributes?.children)),
       barAssistant: await barStatus(),
       immich: await immichStatus(),
@@ -786,6 +833,108 @@ async function integrationEntities(platform) {
 }
 
 let homeLoc = null;
+
+// ---------- Grocy (direct API) ----------
+let grocyBase = GROCY.url;
+let grocyNote = '';
+let grocyCheckedAt = 0;
+async function probeGrocy(base) {
+  try {
+    const r = await fetch(`${base}/api/system/info`, { headers: GROCY.key ? { 'GROCY-API-KEY': GROCY.key } : {}, signal: AbortSignal.timeout(4000) });
+    // 401 still means "this is Grocy" (the key is missing or wrong).
+    return r.ok ? 'ok' : r.status === 401 ? 'auth' : String(r.status);
+  } catch (e) {
+    return e.cause?.code || e.message;
+  }
+}
+async function resolveGrocy() {
+  if (mock) return '';
+  if (Date.now() - grocyCheckedAt < (grocyBase ? 10 * 60000 : 60000)) return grocyBase;
+  grocyCheckedAt = Date.now();
+  grocyNote = '';
+  if (GROCY.url) return (grocyBase = GROCY.url);
+  if (!IN_ADDON) return (grocyBase = '');
+  try {
+    const sup = (path_) => fetch(`http://supervisor${path_}`, { headers: { Authorization: `Bearer ${process.env.SUPERVISOR_TOKEN}` }, signal: AbortSignal.timeout(5000) }).then((r) => (r.ok ? r.json() : null));
+    const list = (await sup('/addons'))?.data?.addons ?? [];
+    for (const a of list.filter((x) => /grocy/i.test(x.slug) && x.state === 'started')) {
+      const host = a.slug.replace(/_/g, '-');
+      const info = (await sup(`/addons/${a.slug}/info`).catch(() => null))?.data;
+      const ports = new Set([...Object.keys(info?.network || {}).map((k) => parseInt(k, 10)), 80, 9192, info?.ingress_port].filter(Boolean));
+      for (const port of ports) {
+        const base = `http://${host}:${port}`;
+        const r = await probeGrocy(base);
+        if (r === 'ok' || r === 'auth') {
+          grocyNote = `Found the ${a.name} add-on.`;
+          return (grocyBase = base);
+        }
+      }
+    }
+  } catch {
+    /* no Supervisor access */
+  }
+  return (grocyBase = '');
+}
+async function grocyApi(method, path_, body) {
+  const base = await resolveGrocy();
+  if (!base) throw new Error('Grocy is not set up');
+  const r = await fetch(`${base}/api${path_}`, {
+    method,
+    headers: { 'GROCY-API-KEY': GROCY.key, Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(10000),
+  });
+  if (r.status === 401) throw new Error('Grocy rejected the API key');
+  if (!r.ok) throw new Error(`Grocy answered ${r.status}`);
+  const text = await r.text();
+  return text ? JSON.parse(text) : null;
+}
+async function grocyStatus() {
+  if (mock) return { configured: false, ok: false };
+  const base = await resolveGrocy();
+  if (!base) return { configured: false, ok: false };
+  if (!GROCY.key)
+    return { configured: true, ok: false, needsKey: true, error: `${grocyNote || 'Found Grocy.'} Create an API key in Grocy (wrench icon → Manage API keys), paste it into “Grocy API key” on the Hearth add-on's Configuration tab, and restart Hearth.` };
+  const r = await probeGrocy(base);
+  if (r === 'ok') return { configured: true, ok: true, note: grocyNote || undefined };
+  grocyCheckedAt = 0;
+  return { configured: true, ok: false, error: r === 'auth' ? 'Grocy rejected the API key. Check “Grocy API key” on the Configuration tab.' : `Can't reach Grocy at ${base} (${r}).` };
+}
+/** Shopping list, chores, expiring food, and meal plan in the same shapes the HA integration gives. */
+async function grocyData() {
+  const [shop, products, chores, volatile, plan, recipes, sections] = await Promise.all([
+    grocyApi('GET', '/objects/shopping_list').catch(() => []),
+    grocyApi('GET', '/objects/products').catch(() => []),
+    grocyApi('GET', '/chores').catch(() => []),
+    grocyApi('GET', '/stock/volatile?due_soon_days=5').catch(() => ({})),
+    grocyApi('GET', '/objects/meal_plan').catch(() => []),
+    grocyApi('GET', '/objects/recipes').catch(() => []),
+    grocyApi('GET', '/objects/meal_plan_sections').catch(() => []),
+  ]);
+  const productName = new Map((products || []).map((p) => [Number(p.id), p.name]));
+  const recipeName = new Map((recipes || []).map((x) => [Number(x.id), x.name]));
+  const sectionName = new Map((sections || []).map((x) => [Number(x.id), x.name]));
+  const today = new Date();
+  const from = new Date(today.getTime() - 7 * 86400000).toISOString().slice(0, 10);
+  const to = new Date(today.getTime() + 21 * 86400000).toISOString().slice(0, 10);
+  return {
+    shopping: (shop || []).map((i) => ({ id: Number(i.id), name: productName.get(Number(i.product_id)) || i.note || `Item ${i.id}`, amount: Number(i.amount) || 1, done: Number(i.done) === 1 })),
+    chores: (chores || []).map((c) => ({ id: Number(c.chore_id ?? c.id), name: c.chore_name ?? c.name ?? `Chore ${c.chore_id}`, due: c.next_estimated_execution_time || undefined })),
+    expiring: [...(volatile?.expired_products || []), ...(volatile?.overdue_products || []), ...(volatile?.due_products || [])].map((p) => ({
+      id: Number(p.product_id ?? p.id),
+      name: p.product?.name ?? productName.get(Number(p.product_id)) ?? `Product ${p.product_id}`,
+      date: String(p.best_before_date ?? '').slice(0, 10),
+      amount: Number(p.amount) || 1,
+    })),
+    meals: (plan || [])
+      .filter((m) => m.day >= from && m.day <= to)
+      .map((m) => ({
+        day: String(m.day).slice(0, 10),
+        name: recipeName.get(Number(m.recipe_id)) || productName.get(Number(m.product_id)) || m.note || 'Meal',
+        section: String(sectionName.get(Number(m.section_id)) || '').toLowerCase(),
+      })),
+  };
+}
 
 // ---------- Frigate ----------
 // The configured address is tried first. If it fails (or none is set), look for a Frigate add-on on this

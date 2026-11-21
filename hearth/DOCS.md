@@ -20,6 +20,8 @@ To use Hearth on a tablet that isn't signed in to HA, set a host port for `8099/
 
 **Event locations:** suggestions come from Photon (photon.komoot.io, OpenStreetMap data) through the add-on. Only the text typed into the Location box is sent.
 
+**Grocy:** with the Grocy integration from HACS, Grocy works on its own. With only the Grocy add-on, create an API key in Grocy (wrench icon → **Manage API keys**), paste it into **Grocy API key** on the Configuration tab, and restart Hearth. Hearth finds the add-on by itself; set **Grocy address** only if Grocy runs elsewhere.
+
 **Photos from Immich:** set **Immich address** (for example `http://192.168.1.20:2283`) and an **Immich API key** (in Immich: Account settings → API keys) on the Configuration tab, then restart. Choose albums in Hearth under Settings → Photos.
 
 ## Wall tablet setup (recommended)

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.2
+- **Grocy add-on support:** Hearth can now talk to Grocy directly, so the Grocy add-on works without the HACS integration. Hearth finds the add-on by itself; create an API key in Grocy (wrench icon → Manage API keys), paste it into **Grocy API key** on the Hearth add-on's Configuration tab, and restart Hearth. The shopping list, chores, expiring food, and meal plan all work, including adding and ticking off items.
+- Settings → Integrations says exactly what Grocy still needs.
+- **List settings:** the list picker now shows up to 60 lists (it stopped at 12), so AnyList lists appear without searching.
+- Removed the "Not shown" row from the Lists screen.
+
 ## 0.15.1
 - **Recipes meal plan:** meals you removed or replaced on the Meals screen no longer show under Recipes → Meal plan.
 - **New lists show up:** if you've picked specific lists in Settings, lists added to Home Assistant later (like a new AnyList list) appear in a "Not shown" row at the top of Lists. Tap one to add it.

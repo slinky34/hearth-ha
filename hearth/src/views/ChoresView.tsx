@@ -5,7 +5,8 @@ import { Check, ChevronLeft, ChevronRight, Flame, Pencil, Star, Trash2 } from 'l
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Modal } from '../components/Modal';
 import { api } from '../lib/api';
-import { useGrocy } from '../lib/grocy';
+import { grocyDoChore, useGrocy } from '../lib/grocy';
+import { toast } from '../components/Toast';
 import { useHa } from '../lib/ha';
 import { useKiosk } from '../lib/kiosk';
 import { useFolded } from '../lib/hooks';
@@ -256,7 +257,7 @@ function GrocyColumn() {
             className={`chore ${busy === c.id ? 'done' : ''}`}
             onClick={async () => {
               setBusy(c.id);
-              await api.service('grocy', 'execute_chore', { chore_id: c.id }).catch(() => undefined);
+              await grocyDoChore(c.id).catch((e) => toast((e as Error).message));
               setTimeout(() => {
                 setBusy(null);
                 reload();

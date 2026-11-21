@@ -21,10 +21,11 @@ export function EntityPicker({
   const [focus, setFocus] = useState(false);
   const byId = new Map(entities.map((e) => [e.entity_id, e]));
   const needle = q.trim().toLowerCase();
-  const results = entities
+  const LIMIT = 60;
+  const matches = entities
     .filter((e) => !selected.includes(e.entity_id))
-    .filter((e) => !needle || `${e.name} ${e.entity_id}`.toLowerCase().includes(needle))
-    .slice(0, 12);
+    .filter((e) => !needle || `${e.name} ${e.entity_id}`.toLowerCase().includes(needle));
+  const results = matches.slice(0, LIMIT);
 
   return (
     <div className="entity-picker">
@@ -67,6 +68,7 @@ export function EntityPicker({
               </button>
             ))}
             {results.length === 0 && <p className="muted small">{t('No matches')}</p>}
+            {matches.length > LIMIT && <p className="muted small">{t('{n} more. Type to narrow it down.', { n: matches.length - LIMIT })}</p>}
           </div>
         )}
       </div>

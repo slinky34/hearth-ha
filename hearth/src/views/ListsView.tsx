@@ -2,7 +2,8 @@ import { parseISO } from 'date-fns';
 import { Check, ChevronDown, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api } from '../lib/api';
-import { useGrocy } from '../lib/grocy';
+import { grocyAddItem, grocySetDone, useGrocy } from '../lib/grocy';
+import { toast } from '../components/Toast';
 import { useHa } from '../lib/ha';
 import { useStore } from '../lib/store';
 import type { TodoItem } from '../lib/types';
@@ -28,15 +29,11 @@ export function readableItem(summary: string): { text: string; raw: boolean } {
 }
 
 export function ListsView() {
-  const { data, set } = useStore();
-  const { settings } = data;
+  const { settings } = useStore().data;
   const { entities, error } = useHa();
   const { grocy, reload: reloadGrocy } = useGrocy();
   const todos = entities.filter((e) => e.entity_id.startsWith('todo.'));
   const shown = settings.lists.length ? todos.filter((t) => settings.lists.includes(t.entity_id)) : todos;
-  // Lists added in HA after you picked lists (e.g. a new AnyList list) would stay hidden; offer them here.
-  const notShown = settings.lists.length ? todos.filter((t) => !settings.lists.includes(t.entity_id)) : [];
-  const showList = (id: string) => set('settings', (prev) => ({ ...prev, lists: [...prev.lists, id] }));
 
   return (
     <div className="lists">
@@ -47,16 +44,6 @@ export function ListsView() {
       {shown.length === 0 && !grocy.shopping && !error && (
         <div className="empty">
           {t('No lists found. Add Shopping List, Local To-do, AnyList, Todoist, or Grocy in Home Assistant, then pick lists in Settings.')}
-        </div>
-      )}
-      {notShown.length > 0 && (
-        <div className="more-lists">
-          <span className="muted small">{t('Not shown:')}</span>
-          {notShown.map((l) => (
-            <button key={l.entity_id} className="chip small" onClick={() => showList(l.entity_id)}>
-              + {l.name}
-            </button>
-          ))}
         </div>
       )}
       <div className="list-grid">
@@ -254,12 +241,12 @@ function GrocyShopping({ items, reload }: { items: { id: number; name: string; a
     if (!note) return;
     setText('');
     setLocal((p) => [...p, { id: -Date.now(), name: note, amount: 1, done: false }]);
-    await api.service('grocy', 'add_generic', { entity_type: 'shopping_list', data: { note, amount: 1, shopping_list_id: 1 } }).catch(() => undefined);
+    await grocyAddItem(note).catch((e) => toast((e as Error).message));
     later();
   };
   const toggle = async (id: number, done: boolean) => {
     setLocal((p) => p.map((x) => (x.id === id ? { ...x, done: !done } : x)));
-    await api.service('grocy', 'update_generic', { entity_type: 'shopping_list', object_id: id, data: { done: done ? 0 : 1 } }).catch(() => undefined);
+    await grocySetDone(id, !done).catch((e) => toast((e as Error).message));
     later();
   };
   const open = local.filter((i) => !i.done);

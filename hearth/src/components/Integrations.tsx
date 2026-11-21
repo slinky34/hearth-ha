@@ -7,6 +7,7 @@ interface Status {
   domains: string[];
   counts: { calendar: number; todo: number; weather: number; media_player: number; notify: number };
   grocy: boolean;
+  grocyDirect?: { configured: boolean; ok: boolean; error?: string; note?: string };
   taskmate: boolean;
   barAssistant: { configured: boolean; ok: boolean; error?: string };
   immich: { configured: boolean; ok: boolean; error?: string };
@@ -46,7 +47,16 @@ export function Integrations() {
             : t('Install the Frigate add-on and Hearth finds it on its own. If Frigate runs on another machine, set the Frigate address on the Hearth add-on’s Configuration tab (http://<its IP>:5000).'),
           problem: st.frigate.configured && !st.frigate.ok,
         },
-        { icon: '🥫', name: 'Grocy', on: st.grocy, detail: t('Shopping, chores, expiring food, meal plan'), how: t('Install the Grocy custom integration (HACS) in Home Assistant.') },
+        {
+          icon: '🥫',
+          name: 'Grocy',
+          on: st.grocy,
+          detail: st.grocyDirect?.ok ? `${t('Shopping, chores, expiring food, meal plan')} · ${t('via the Grocy add-on')}` : t('Shopping, chores, expiring food, meal plan'),
+          how: st.grocyDirect?.configured && st.grocyDirect.error
+            ? st.grocyDirect.error
+            : t('Install the Grocy add-on (then add an API key on the Hearth add-on’s Configuration tab) or the Grocy integration from HACS.'),
+          problem: !!st.grocyDirect?.configured && !st.grocyDirect.ok,
+        },
         { icon: '⭐', name: 'TaskMate', on: st.taskmate, detail: t('Link kids’ chore lists under Family'), how: t('Install the TaskMate custom integration (HACS) in Home Assistant.') },
         { icon: '🛒', name: 'AnyList', on: has('anylist'), detail: t('Shows under Lists'), how: t('Install the AnyList custom integration (HACS); its lists appear as to-do lists.') },
         { icon: '📱', name: t('Phones'), on: n('notify') > 0, detail: t('{n} found', { n: n('notify') }), how: t('Install the Home Assistant Companion app on each phone.') },

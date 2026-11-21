@@ -43,12 +43,54 @@ export interface Grocy {
 
 const EMPTY: Grocy = { available: false, shopping: null, chores: null, expiring: null, meals: null };
 
+// Where Grocy data comes from: the HA integration's sensors, or Grocy's own API through the add-on.
+let source: 'ha' | 'direct' = 'ha';
+
+async function direct(): Promise<Grocy | null> {
+  const r = await fetch('api/grocy/data').catch(() => null);
+  if (!r?.ok) return null;
+  const d = await r.json();
+  return {
+    available: true,
+    shopping: d.shopping ?? [],
+    chores: (d.chores ?? []).map((c: { id: number; name: string; due?: string }) => ({ ...c, due: c.due ? new Date(c.due) : undefined })),
+    expiring: d.expiring ?? [],
+    meals: d.meals ?? [],
+  };
+}
+
+async function post(path: string, method: string, body: unknown) {
+  const r = await fetch(path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.error || `Grocy: ${r.status}`);
+}
+/** Add an item to Grocy's shopping list. */
+export const grocyAddItem = (note: string) =>
+  source === 'direct'
+    ? post('api/grocy/shopping', 'POST', { note })
+    : api.service('grocy', 'add_generic', { entity_type: 'shopping_list', data: { note, amount: 1, shopping_list_id: 1 } });
+/** Tick or untick a shopping list item. */
+export const grocySetDone = (id: number, done: boolean) =>
+  source === 'direct'
+    ? post(`api/grocy/shopping/${id}`, 'PUT', { done })
+    : api.service('grocy', 'update_generic', { entity_type: 'shopping_list', object_id: id, data: { done: done ? 1 : 0 } });
+/** Mark a Grocy chore as done. */
+export const grocyDoChore = (id: number) =>
+  source === 'direct' ? post(`api/grocy/chores/${id}/execute`, 'POST', {}) : api.service('grocy', 'execute_chore', { chore_id: id });
+
 export function useGrocy() {
   const [g, setG] = useState<Grocy>(EMPTY);
   const load = useCallback(async () => {
     try {
       const IDS = await grocyIds();
       const states = await api.states({ ids: IDS });
+      if (states.length === 0) {
+        // No Grocy integration in HA: try Grocy's own API (the Grocy add-on).
+        const d = await direct();
+        source = d ? 'direct' : 'ha';
+        setG(d ?? EMPTY);
+        return;
+      }
+      source = 'ha';
       const by = (id: string) => states.find((s) => s.entity_id === id);
       const shop = by(IDS[0]);
       const chores = by(IDS[1]);
