@@ -61,7 +61,8 @@ export interface Note {
 export type Completions = Record<string, string[]>;
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner';
-export type MealDay = Partial<Record<MealType, string>>;
+/** A day's meals. `hide` lists slots where Mealie/Grocy entries are hidden in Hearth. */
+export type MealDay = Partial<Record<MealType, string>> & { hide?: MealType[] };
 export type Meals = Record<string, MealDay>;
 
 export interface Settings {

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.1
+- **Remove meals:** tap a planned meal to open it, then tap **Remove**, or change it and tap **Save**. Empty slots still let you type straight in.
+- Mealie and Grocy meals can be removed too. This hides them in Hearth; delete them in Mealie or Grocy to remove them everywhere. You can also replace them with something else.
+- Tap anywhere on a Mealie meal to open it. Tapping the recipe name still opens the recipe.
+
 ## 0.14.0
 - **Redesigned phone layout:** a proper phone app instead of a squeezed tablet screen.
   - A bottom bar with Today, Calendar, Tasks, and Lists. Everything else is under **More**.

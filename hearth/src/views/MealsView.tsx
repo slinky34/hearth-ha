@@ -1,5 +1,6 @@
 import { addDays, addWeeks, isToday, startOfWeek } from 'date-fns';
-import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { Modal } from '../components/Modal';
 import { useState } from 'react';
 import { useGrocy } from '../lib/grocy';
 import { mealPlan, type PlanEntry } from '../lib/mealie';
@@ -7,7 +8,7 @@ import { openRecipe } from './RecipesView';
 import { useEffect } from 'react';
 import { useStore } from '../lib/store';
 import { useIsPhone } from '../lib/hooks';
-import type { MealType } from '../lib/types';
+import type { MealDay, MealType } from '../lib/types';
 import { dateKey } from '../lib/util';
 import { dateShort, format, t } from '../lib/i18n';
 
@@ -48,11 +49,12 @@ export function MealsView() {
     mealPlan(weekStart, 7).then(setMealie).catch(() => setMealie([]));
   }, [weekStart]);
   // Mealie "side" entries go with dinner.
+  const hidden = (k: string, meal: MealType) => !!data.meals[k]?.hide?.includes(meal);
   const mealieFor = (k: string, meal: MealType) =>
-    mealie.filter((e) => e.date === k && (e.type === meal || (meal === 'dinner' && e.type === 'side')));
+    hidden(k, meal) ? [] : mealie.filter((e) => e.date === k && (e.type === meal || (meal === 'dinner' && e.type === 'side')));
   // Grocy meal plan entries fill empty slots (sections without a name count as dinner).
   const grocyMeal = (k: string, meal: MealType) =>
-    grocy.meals
+    hidden(k, meal) ? '' : grocy.meals
       ?.filter((g) => g.day === k && (g.section.includes(meal) || (!g.section && meal === 'dinner')))
       .map((g) => g.name)
       .join(', ') || '';
@@ -61,20 +63,31 @@ export function MealsView() {
     setEditing(`${k}|${meal}`);
     setDraft(data.meals[k]?.[meal] ?? '');
   };
-  const commit = () => {
-    if (!editing) return;
-    const [k, meal] = editing.split('|') as [string, MealType];
-    const value = draft.trim();
+  /** Writes one slot: a Hearth meal (or nothing), and whether outside entries are hidden. */
+  const write = (k: string, meal: MealType, value: string, hide?: boolean) =>
     set('meals', (prev) => {
-      const day = { ...prev[k] };
+      const day: MealDay = { ...prev[k] };
       if (value) day[meal] = value;
       else delete day[meal];
+      if (hide !== undefined) {
+        const h = new Set(day.hide ?? []);
+        if (hide) h.add(meal);
+        else h.delete(meal);
+        if (h.size) day.hide = [...h];
+        else delete day.hide;
+      }
       const next = { ...prev, [k]: day };
       if (!Object.keys(day).length) delete next[k];
       return next;
     });
+  const commit = () => {
+    if (!editing) return;
+    const [k, meal] = editing.split('|') as [string, MealType];
+    write(k, meal, draft.trim());
     setEditing(null);
   };
+  // Tapping a filled slot opens a sheet with Save / Remove.
+  const [sheet, setSheet] = useState<{ k: string; meal: (typeof MEALS)[number]; date: Date } | null>(null);
 
   const cell = (d: Date, m: (typeof MEALS)[number]) => {
               const k = dateKey(d);
@@ -98,10 +111,10 @@ export function MealsView() {
                 />
               ) : (
                 !value && mealieFor(k, m.key).length > 0 ? (
-                  <div key={id} className={`meal-cell filled mealie ${m.key}`}>
+                  <div key={id} className={`meal-cell filled mealie ${m.key}`} role="button" tabIndex={0} onClick={() => setSheet({ k, meal: m, date: d })}>
                     {mealieFor(k, m.key).map((e, n) =>
                       e.recipe ? (
-                        <button key={n} className="meal-recipe" onClick={() => openRecipe(e.recipe!.slug)}>
+                        <button key={n} className="meal-recipe" onClick={(ev) => { ev.stopPropagation(); openRecipe(e.recipe!.slug); }}>
                           📖 {e.recipe.name}
                         </button>
                       ) : (
@@ -109,12 +122,12 @@ export function MealsView() {
                       ),
                     )}
                     <span className="raw-tag">Mealie</span>
-                    <button className="meal-edit" onClick={() => begin(k, m.key)} aria-label={t('Edit')}>
+                    <button className="meal-edit" onClick={(ev) => { ev.stopPropagation(); setSheet({ k, meal: m, date: d }); }} aria-label={t('Edit')}>
                       ✎
                     </button>
                   </div>
                 ) : (
-                <button key={id} className={`meal-cell ${value ? 'filled' : ''} ${m.key}`} onClick={() => begin(k, m.key)}>
+                <button key={id} className={`meal-cell ${value ? 'filled' : ''} ${m.key}`} onClick={() => (value || grocyMeal(k, m.key) ? setSheet({ k, meal: m, date: d }) : begin(k, m.key))}>
                   {value ??
                     (grocyMeal(k, m.key) ? (
                       <span className="grocy-meal">
@@ -128,6 +141,19 @@ export function MealsView() {
                 )
               );
   };
+
+  const sheetView = sheet && (
+    <MealSheet
+      key={`${sheet.k}|${sheet.meal.key}`}
+      title={`${t(sheet.meal.label)} · ${format(sheet.date, 'EEE d')}`}
+      value={data.meals[sheet.k]?.[sheet.meal.key] ?? ''}
+      mealie={mealieFor(sheet.k, sheet.meal.key)}
+      grocy={grocyMeal(sheet.k, sheet.meal.key)}
+      onSave={(v) => write(sheet.k, sheet.meal.key, v)}
+      onRemove={() => write(sheet.k, sheet.meal.key, '', !!(mealieFor(sheet.k, sheet.meal.key).length || grocyMeal(sheet.k, sheet.meal.key)))}
+      onClose={() => setSheet(null)}
+    />
+  );
 
   const header = (
     <div className="view-head">
@@ -163,6 +189,7 @@ export function MealsView() {
             </section>
           ))}
         </div>
+        {sheetView}
       </div>
     );
 
@@ -192,6 +219,76 @@ export function MealsView() {
           </div>
         ))}
       </div>
+      {sheetView}
     </div>
+  );
+}
+
+/** Edit or remove one meal slot. Mealie/Grocy entries can be hidden or replaced. */
+function MealSheet({ title, value, mealie, grocy, onSave, onRemove, onClose }: {
+  title: string;
+  value: string;
+  mealie: PlanEntry[];
+  grocy: string;
+  onSave: (v: string) => void;
+  onRemove: () => void;
+  onClose: () => void;
+}) {
+  const [text, setText] = useState(value);
+  const outside = !value && (mealie.length > 0 || !!grocy);
+  const save = () => {
+    onSave(text.trim());
+    onClose();
+  };
+  const remove = () => {
+    onRemove();
+    onClose();
+  };
+  return (
+    <Modal
+      title={title}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn danger" onClick={remove}>
+            <Trash2 size={18} /> {t('Remove')}
+          </button>
+          <div className="grow" />
+          <button className="btn primary" onClick={save} disabled={!text.trim() && !value}>
+            {t('Save')}
+          </button>
+        </>
+      }
+    >
+      <div className="form">
+        {outside && (
+          <div className="meal-source">
+            {mealie.map((e, n) =>
+              e.recipe ? (
+                <button key={n} className="btn" onClick={() => { onClose(); openRecipe(e.recipe!.slug); }}>
+                  <BookOpen size={18} /> {e.recipe.name}
+                </button>
+              ) : (
+                <b key={n}>{e.title}</b>
+              ),
+            )}
+            {grocy && <b>{grocy}</b>}
+            <p className="muted small">
+              {mealie.length
+                ? t('From Mealie. Remove hides it here; delete it in Mealie to remove it everywhere.')
+                : t('From Grocy. Remove hides it here; delete it in Grocy to remove it everywhere.')}
+            </p>
+          </div>
+        )}
+        <input
+          autoFocus={!outside}
+          className="big"
+          placeholder={outside ? t('Replace with something else') : t('Tacos')}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && save()}
+        />
+      </div>
+    </Modal>
   );
 }
