@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.3
+- **Several cameras on Today:** pick as many cameras as you like for the Today camera card under Settings → Cameras → Today screen. Each one plays live with its name; tap any of them for full screen. On a tablet they stack in the camera column; on a phone they sit two per row.
+- With more than one camera, each stream runs at a lower resolution to save bandwidth.
+- Your earlier single-camera choice carries over.
+
 ## 0.15.2
 - **Grocy add-on support:** Hearth can now talk to Grocy directly, so the Grocy add-on works without the HACS integration. Hearth finds the add-on by itself; create an API key in Grocy (wrench icon → Manage API keys), paste it into **Grocy API key** on the Hearth add-on's Configuration tab, and restart Hearth. The shopping list, chores, expiring food, and meal plan all work, including adding and ticking off items.
 - Settings → Integrations says exactly what Grocy still needs.

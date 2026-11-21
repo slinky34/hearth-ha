@@ -483,13 +483,15 @@ export function SettingsView() {
           </label>
           {settings.cameras.today.show && (
             <>
-              <label>
-                {t('Camera')}
-                <select value={settings.cameras.today.camera} onChange={(e) => s('cameras', { ...settings.cameras, today: { ...settings.cameras.today, camera: e.target.value } })}>
-                  <option value="">{t('First chosen camera')}</option>
-                  {cameras.map((x) => <option key={x.entity_id} value={x.entity_id}>{x.name}</option>)}
-                </select>
-              </label>
+              <div className="today-cam-picker">
+                <EntityPicker
+                  entities={cameras}
+                  selected={settings.cameras.today.cameras}
+                  onChange={(v) => s('cameras', { ...settings.cameras, today: { ...settings.cameras.today, cameras: v } })}
+                  placeholder={t('Add cameras to Today…')}
+                  emptyHint={t('None picked: Today shows the first chosen camera.')}
+                />
+              </div>
               <label className="row check-row">
                 <input type="checkbox" checked={settings.cameras.today.detections} onChange={(e) => s('cameras', { ...settings.cameras, today: { ...settings.cameras.today, detections: e.target.checked } })} />
                 {t('Show latest detections next to it')}

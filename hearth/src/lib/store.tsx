@@ -3,6 +3,12 @@ import { api } from './api';
 import { demoData, demoSettings } from './demo';
 import type { Mode, Settings, StoreData } from './types';
 
+/** Today camera settings, upgrading the old single `camera` to a `cameras` list. */
+function todayCams(t?: Partial<Settings['cameras']['today']>): Settings['cameras']['today'] {
+  const cameras = Array.isArray(t?.cameras) ? t.cameras : t?.camera ? [t.camera] : [];
+  return { show: t?.show ?? true, detections: t?.detections ?? true, cameras };
+}
+
 export const DEFAULT_SETTINGS: Settings = {
   weatherEntity: 'weather.home',
   lists: [],
@@ -36,7 +42,7 @@ export const DEFAULT_SETTINGS: Settings = {
   leaveBy: { enabled: false, region: 'us', buffer: 5 },
   rewardPin: true,
   nav: { hidden: [], rewardsInTasks: false, showFull: true },
-  cameras: { list: [], detections: true, labels: ['person', 'car', 'package'], today: { show: true, camera: '', detections: true } },
+  cameras: { list: [], detections: true, labels: ['person', 'car', 'package'], today: { show: true, cameras: [], detections: true } },
 };
 
 function normalize(raw: Partial<StoreData>): StoreData {
@@ -51,7 +57,7 @@ function normalize(raw: Partial<StoreData>): StoreData {
       tts: { ...DEFAULT_SETTINGS.tts, ...raw.settings?.tts },
       leaveBy: { ...DEFAULT_SETTINGS.leaveBy, ...raw.settings?.leaveBy },
       nav: { ...DEFAULT_SETTINGS.nav, ...raw.settings?.nav },
-      cameras: { ...DEFAULT_SETTINGS.cameras, ...raw.settings?.cameras, today: { ...DEFAULT_SETTINGS.cameras.today, ...raw.settings?.cameras?.today } } },
+      cameras: { ...DEFAULT_SETTINGS.cameras, ...raw.settings?.cameras, today: todayCams(raw.settings?.cameras?.today) } },
     timers: raw.timers ?? [],
     rewards: raw.rewards ?? [],
     redemptions: raw.redemptions ?? [],

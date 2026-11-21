@@ -1079,3 +1079,8 @@ button.meal-label { text-align: left; align-items: flex-start; }
   .today-split:has(> .cam-col) { grid-auto-columns: minmax(200px, 1fr); }
   .cam-col .person-head h2 { font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 }
+.today-lives { display: flex; flex-direction: column; gap: 8px; }
+.today-live { position: relative; }
+.today-live-name { position: absolute; left: 6px; bottom: 6px; padding: 2px 8px; border-radius: 8px; background: rgba(0,0,0,.55); color: #fff; font-size: 12px; font-weight: 700; text-transform: capitalize; max-width: calc(100% - 12px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cam-card .today-lives:not(.n1), .app.phone .today-lives:not(.n1) { display: grid; grid-template-columns: 1fr 1fr; }
+.today-cam-picker { grid-column: 1 / -1; }

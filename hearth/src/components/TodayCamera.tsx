@@ -10,12 +10,13 @@ import { formatDistanceToNowStrict } from 'date-fns';
 export function TodayCamera({ asColumn = true }: { asColumn?: boolean }) {
   const { cameras } = useStore().data.settings;
   const chosen = useChosenCameras(cameras.list);
-  const cam = cameras.today.camera || chosen[0];
+  const cams = cameras.today.cameras.length ? cameras.today.cameras : chosen.slice(0, 1);
   const name = useCameraName();
   const { status, events } = useDetections(cameras.today.show && cameras.today.detections);
-  const [full, setFull] = useState(false);
+  const [full, setFull] = useState<string | null>(null);
   const [snap, setSnap] = useState<Detection | null>(null);
-  if (!cameras.today.show || !cam) return null;
+  if (!cameras.today.show || cams.length === 0) return null;
+  const one = cams.length === 1;
 
   return (
     <section className={asColumn ? 'person-col cam-col' : 'cam-card'}>
@@ -23,12 +24,18 @@ export function TodayCamera({ asColumn = true }: { asColumn?: boolean }) {
         <span className="avatar cam-avatar">
           <Video size={20} />
         </span>
-        <h2>{name(cam)}</h2>
+        <h2>{one ? name(cams[0]) : t('Cameras')}</h2>
         <span className="live-dot">LIVE</span>
       </header>
-      <button className="today-live" onClick={() => setFull(true)} aria-label={t('Open live view')}>
-        <LiveImg cam={cam} h={360} fps={5} />
-      </button>
+      <div className={`today-lives n${Math.min(cams.length, 4)}`}>
+        {cams.map((c) => (
+          <button key={c} className="today-live" onClick={() => setFull(c)} aria-label={t('Open live view')}>
+            {/* Several streams at once: keep each one light. */}
+            <LiveImg cam={c} h={one ? 360 : 240} fps={one ? 5 : 3} />
+            {!one && <span className="today-live-name">{name(c)}</span>}
+          </button>
+        ))}
+      </div>
       {cameras.today.detections && status?.ok && (
         <div className="person-tasks">
           <h3 className="today-label">{t('Recent detections')}</h3>
@@ -48,7 +55,7 @@ export function TodayCamera({ asColumn = true }: { asColumn?: boolean }) {
           ))}
         </div>
       )}
-      {full && <CameraFull cam={cam} onClose={() => setFull(false)} />}
+      {full && <CameraFull cam={full} onClose={() => setFull(null)} />}
       {snap && <DetectionFull d={snap} onClose={() => setSnap(null)} />}
     </section>
   );

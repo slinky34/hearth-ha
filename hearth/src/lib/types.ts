@@ -116,8 +116,8 @@ export interface Settings {
     list: string[];
     detections: boolean;
     labels: string[];
-    /** Today screen card: a live camera and the latest detections. Empty camera = first chosen camera. */
-    today: { show: boolean; camera: string; detections: boolean };
+    /** Today screen card: live cameras and the latest detections. No cameras = the first chosen camera. */
+    today: { show: boolean; cameras: string[]; detections: boolean; /** older single-camera setting */ camera?: string };
   };
   /** Sidebar: hidden tabs, and Rewards shown inside Tasks instead of its own tab. */
   nav: { hidden: string[]; rewardsInTasks: boolean; showFull: boolean };
