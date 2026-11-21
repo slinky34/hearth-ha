@@ -44,8 +44,8 @@ function useTheme(theme: 'light' | 'dark' | 'auto', palette: string) {
   }, [theme, palette]);
 }
 
-/** Asks for the kiosk PIN (if one is set) before leaving kiosk mode. */
-function ExitKiosk({ onClose }: { onClose: () => void }) {
+/** Asks for the kiosk PIN (if one is set), then either leaves kiosk mode or just unlocks Settings. */
+function ExitKiosk({ onClose, onSettings }: { onClose: () => void; onSettings?: () => void }) {
   const { data } = useStore();
   const { setKiosk } = useKiosk();
   const [pin, setPin] = useState('');
@@ -57,12 +57,13 @@ function ExitKiosk({ onClose }: { onClose: () => void }) {
       setPin('');
       return;
     }
-    setKiosk(false);
+    if (onSettings) onSettings();
+    else setKiosk(false);
     onClose();
   };
   return (
     <Modal
-      title={t('Leave kiosk mode?')}
+      title={onSettings ? t('Open Settings?') : t('Leave kiosk mode?')}
       onClose={onClose}
       footer={
         <>
@@ -77,7 +78,7 @@ function ExitKiosk({ onClose }: { onClose: () => void }) {
     >
       <div className="form">
         <p className="muted" style={{ margin: 0 }}>
-          {t('This unlocks Settings and editing on this screen.')}
+          {onSettings ? t('Settings opens without leaving kiosk mode, and locks again when you leave it.') : t('This unlocks Settings and editing on this screen.')}
         </p>
         {pinSet && (
           <input
@@ -109,6 +110,9 @@ function Shell() {
   });
   const [idle, setIdle] = useIdle(data.settings.screensaverMinutes);
   const [exiting, setExiting] = useState(false);
+  // Kiosk mode: Settings can be opened (behind the PIN) without leaving kiosk mode; it re-locks when you leave it.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [askSettings, setAskSettings] = useState(false);
   const [recipeToOpen, setRecipeToOpen] = useState<string | null>(null);
   const clearRecipe = useCallback(() => setRecipeToOpen(null), []);
   const press = useRef(0);
@@ -152,10 +156,19 @@ function Shell() {
     if (idle) setTab('today');
   }, [idle]);
 
-  // Settings is locked in kiosk mode.
+  // Settings is locked in kiosk mode unless it was just unlocked; leaving it locks it again.
   useEffect(() => {
-    if (kiosk && tab === 'settings') setTab('today');
-  }, [kiosk, tab]);
+    if (!kiosk) return setSettingsOpen(false);
+    if (tab !== 'settings') setSettingsOpen(false);
+    else if (!settingsOpen) setTab('today');
+  }, [kiosk, tab, settingsOpen]);
+  const openSettings = () => {
+    if (!kiosk) return setTab('settings');
+    if (!data.settings.kioskPin) {
+      setSettingsOpen(true);
+      setTab('settings');
+    } else setAskSettings(true);
+  };
 
   const views = () => (
     <>
@@ -170,13 +183,22 @@ function Shell() {
           {tab === 'music' && <MusicView />}
           {tab === 'cameras' && <CamerasView />}
           {tab === 'home' && <HomeView />}
-          {tab === 'settings' && !kiosk && <SettingsView />}
+          {tab === 'settings' && (!kiosk || settingsOpen) && <SettingsView />}
     </>
   );
   const overlays = (
     <>
       {idle && <Screensaver styleOverride={previewStyle ?? undefined} onClose={() => { setIdle(false); setPreviewStyle(null); }} />}
       {exiting && <ExitKiosk onClose={() => setExiting(false)} />}
+      {askSettings && (
+        <ExitKiosk
+          onClose={() => setAskSettings(false)}
+          onSettings={() => {
+            setSettingsOpen(true);
+            setTab('settings');
+          }}
+        />
+      )}
       <Reminders />
       <TimerAlarm />
       <Toaster />
@@ -235,10 +257,16 @@ function Shell() {
                     <span>{t(label)}</span>
                   </button>
                 ))}
-                {kiosk ? (
+                {kiosk && (
                   <button onClick={() => { setMore(false); setExiting(true); }}>
                     <Lock size={26} />
                     <span>{t('Locked')}</span>
+                  </button>
+                )}
+                {kiosk ? (
+                  <button className={tab === 'settings' ? 'on' : ''} onClick={() => { setMore(false); openSettings(); }}>
+                    <Gear size={26} />
+                    <span>{t('Settings')}</span>
                   </button>
                 ) : (
                   <button className={tab === 'settings' ? 'on' : ''} onClick={() => go('settings')}>
@@ -257,7 +285,7 @@ function Shell() {
 
   return (
     <div className="app">
-      <nav className="rail" style={nav.topGap === 'auto' ? undefined : { paddingTop: `calc(env(safe-area-inset-top, 0px) + ${12 + nav.topGap}px)` }}>
+      <nav className="rail">
         <div
           className="logo"
           onPointerDown={logoDown}
@@ -275,10 +303,16 @@ function Shell() {
         ))}
         <div className="grow" />
         {kiosk ? (
-          <button className="rail-btn" onClick={() => setExiting(true)} title="Kiosk mode is on">
-            <Lock size={22} />
-            <span>{t('Locked')}</span>
-          </button>
+          <>
+            <button className="rail-btn" onClick={() => setExiting(true)} title="Kiosk mode is on">
+              <Lock size={22} />
+              <span>{t('Locked')}</span>
+            </button>
+            <button className={`rail-btn ${tab === 'settings' ? 'on' : ''}`} onClick={openSettings}>
+              <Gear size={26} />
+              <span>{t('Settings')}</span>
+            </button>
+          </>
         ) : (
           <>
             {nav.showFull && <button className="rail-btn full" onClick={enterFullscreen} title="Fullscreen">

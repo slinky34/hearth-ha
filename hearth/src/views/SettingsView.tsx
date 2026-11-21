@@ -630,22 +630,6 @@ export function SettingsView() {
 
       <Section id="sidebar" title={t('Sidebar')} summary={settings.nav.hidden.length ? t('{n} hidden', { n: settings.nav.hidden.length }) : undefined}>
         <p className="muted small">{t('Choose which screens appear in the sidebar. Today and Settings are always there.')}</p>
-        <div className="settings-grid">
-          <label>
-            {t('Space above the sidebar')}
-            <select
-              value={String(settings.nav.topGap)}
-              onChange={(e) => s('nav', { ...settings.nav, topGap: e.target.value === 'auto' ? 'auto' : Number(e.target.value) })}
-            >
-              <option value="auto">{t('Automatic')}</option>
-              <option value="0">{t('None')}</option>
-              <option value="50">{t('Small')}</option>
-              <option value="90">{t('Medium')}</option>
-              <option value="130">{t('Large')}</option>
-            </select>
-          </label>
-        </div>
-        <p className="muted small">{t('If something covers the top of the sidebar (like iPad window controls), add space here.')} {t('This screen:')} <ScreenInfo /></p>
         <div className="nav-list">
           {TABS.filter((x) => x.id !== 'today').map(({ id, label, Icon }) => {
             const shown = !settings.nav.hidden.includes(id);
@@ -719,29 +703,4 @@ export function SettingsView() {
       </Section>
     </div>
   );
-}
-
-/** What Hearth detects about this screen (helps sort out layout problems on tablets). */
-function ScreenInfo() {
-  const [info, setInfo] = useState('');
-  useEffect(() => {
-    const probe = document.createElement('div');
-    probe.style.cssText = 'position:fixed;top:0;left:0;padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);visibility:hidden';
-    document.body.appendChild(probe);
-    const cs = getComputedStyle(probe);
-    const cls = document.documentElement.classList;
-    const nav = navigator as Navigator & { standalone?: boolean };
-    setInfo(
-      [
-        cls.contains('standalone') ? 'home-screen app' : 'browser',
-        cls.contains('ipad-app') ? 'iPad' : /iPad|Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1 ? 'iPad (browser)' : '',
-        `display-mode ${['fullscreen', 'standalone', 'minimal-ui', 'browser'].find((m) => window.matchMedia(`(display-mode: ${m})`).matches) ?? '?'}`,
-        nav.standalone !== undefined ? `navigator.standalone ${nav.standalone}` : '',
-        `safe area ${cs.paddingTop} / ${cs.paddingLeft}`,
-        `${window.innerWidth}×${window.innerHeight}`,
-      ].filter(Boolean).join(' · '),
-    );
-    probe.remove();
-  }, []);
-  return <code>{info}</code>;
 }

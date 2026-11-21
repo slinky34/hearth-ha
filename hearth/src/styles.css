@@ -1085,10 +1085,7 @@ button.meal-label { text-align: left; align-items: flex-start; }
 .cam-card .today-lives:not(.n1), .app.phone .today-lives:not(.n1) { display: grid; grid-template-columns: 1fr 1fr; }
 .today-cam-picker { grid-column: 1 / -1; }
 
-/* Home-screen app: room for the status bar, and on iPad for the window controls in the top-left corner. */
+/* Home-screen app: room for the status bar. */
 html.standalone .rail { padding-top: max(12px, env(safe-area-inset-top)); }
 html.standalone .topbar { padding-top: max(16px, env(safe-area-inset-top)); }
-html.ipad-app .rail { padding-top: calc(env(safe-area-inset-top, 0px) + 80px); }
-html.ipad-app .rail .logo { display: none; }
 html.standalone .rail { padding-left: max(8px, env(safe-area-inset-left)); }
-html.ipad-app .app.phone .clock { margin-left: 84px; }

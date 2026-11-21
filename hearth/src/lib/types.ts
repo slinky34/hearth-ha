@@ -120,8 +120,7 @@ export interface Settings {
     today: { show: boolean; cameras: string[]; detections: boolean; /** older single-camera setting */ camera?: string };
   };
   /** Sidebar: hidden tabs, and Rewards shown inside Tasks instead of its own tab. */
-  /** topGap: space above the sidebar's first button ('auto' = make room for iPad window controls when installed). */
-  nav: { hidden: string[]; rewardsInTasks: boolean; showFull: boolean; topGap: 'auto' | number };
+  nav: { hidden: string[]; rewardsInTasks: boolean; showFull: boolean };
 }
 
 export interface Countdown {

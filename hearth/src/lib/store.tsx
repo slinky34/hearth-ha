@@ -41,7 +41,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tts: { engine: '', speaker: '' },
   leaveBy: { enabled: false, region: 'us', buffer: 5 },
   rewardPin: true,
-  nav: { hidden: [], rewardsInTasks: false, showFull: true, topGap: 'auto' },
+  nav: { hidden: [], rewardsInTasks: false, showFull: true },
   cameras: { list: [], detections: true, labels: ['person', 'car', 'package'], today: { show: true, cameras: [], detections: true } },
 };
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.8
+- **Settings in kiosk mode:** the Settings button stays in kiosk mode. Tapping it asks for the kiosk PIN (if you set one) and opens Settings without leaving kiosk mode; it locks again when you leave Settings. Before, Settings disappeared until you left kiosk mode.
+- Removed the automatic iPad sidebar offset and the "Space above the sidebar" setting from 0.15.6 and 0.15.7. They weren't needed (the covered button came from Safari, not Hearth).
+
 ## 0.15.7
 - **Kiosk mode keeps the screen on:** while kiosk mode is on, Hearth asks the device to stay awake (Screen Wake Lock). Before, only Cook mode did this.
 - **Space above the sidebar:** a new setting under Settings → Sidebar (Automatic, None, Small, Medium, Large), for when something covers the top of the sidebar, such as iPad window controls.
