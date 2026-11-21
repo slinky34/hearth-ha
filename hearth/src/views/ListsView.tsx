@@ -1,6 +1,6 @@
 import { parseISO } from 'date-fns';
 import { Check, ChevronDown, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api } from '../lib/api';
 import { useGrocy } from '../lib/grocy';
 import { useHa } from '../lib/ha';
@@ -51,11 +51,7 @@ export function ListsView() {
           <TodoCard key={t.entity_id} entity={t.entity_id} name={t.name} />
         ))}
         {grocy.expiring && grocy.expiring.length > 0 && (
-          <section className="card todo">
-            <header>
-              <h2>{t('Expiring soon')}</h2>
-              <span className="muted small">Grocy</span>
-            </header>
+          <ListCard id="grocy-expiring" title={t('Expiring soon')} count={grocy.expiring.length} tag="Grocy">
             <div className="todo-items">
               {grocy.expiring.map((p) => (
                 <div key={p.id} className="todo-item static">
@@ -67,7 +63,7 @@ export function ListsView() {
                 </div>
               ))}
             </div>
-          </section>
+          </ListCard>
         )}
       </div>
     </div>
@@ -150,12 +146,7 @@ function TodoCard({ entity, name }: { entity: string; name: string }) {
   const done = items.filter((i) => i.status === 'completed');
 
   return (
-    <section className="card todo">
-      <header>
-        <h2>{name}</h2>
-        <span className="muted">{open.length}</span>
-        {loading && <RefreshCw size={16} className="spin muted" />}
-      </header>
+    <ListCard id={entity} title={name} count={open.length} loading={loading}>
       <form
         className="add-row"
         onSubmit={(e) => {
@@ -234,7 +225,7 @@ function TodoCard({ entity, name }: { entity: string; name: string }) {
           )}
         </div>
       )}
-    </section>
+    </ListCard>
   );
 }
 
@@ -260,11 +251,7 @@ function GrocyShopping({ items, reload }: { items: { id: number; name: string; a
   const open = local.filter((i) => !i.done);
   const done = local.filter((i) => i.done);
   return (
-    <section className="card todo">
-      <header>
-        <h2>{t('Grocy shopping')}</h2>
-        <span className="muted">{open.length}</span>
-      </header>
+    <ListCard id="grocy-shopping" title={t('Grocy shopping')} count={open.length}>
       <form className="add-row" onSubmit={(e) => { e.preventDefault(); add(); }}>
         <input placeholder={t('Add an item')} value={text} onChange={(e) => setText(e.target.value)} />
         <button className="icon-btn filled" type="submit" aria-label={t('Add')}>
@@ -283,6 +270,41 @@ function GrocyShopping({ items, reload }: { items: { id: number; name: string; a
         ))}
         {local.length === 0 && <p className="muted center">{t('All clear')} ✨</p>}
       </div>
+    </ListCard>
+  );
+}
+
+/** A list card that folds to its header; folded state is remembered on this device. */
+function ListCard({ id, title, count, tag, loading, children }: {
+  id: string; title: string; count: number; tag?: string; loading?: boolean; children: ReactNode;
+}) {
+  const key = `hearth.list.${id}`;
+  const [closed, setClosed] = useState(() => {
+    try {
+      return localStorage.getItem(key) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () =>
+    setClosed((c) => {
+      try {
+        localStorage.setItem(key, c ? '0' : '1');
+      } catch {
+        /* storage blocked */
+      }
+      return !c;
+    });
+  return (
+    <section className={`card todo ${closed ? 'closed' : ''}`}>
+      <button className="list-head" onClick={toggle} aria-expanded={!closed}>
+        <h2>{title}</h2>
+        {tag && <span className="muted small">{tag}</span>}
+        <span className="list-count">{count}</span>
+        {loading && <RefreshCw size={16} className="spin muted" />}
+        <ChevronDown size={20} className="section-chevron" />
+      </button>
+      {!closed && children}
     </section>
   );
 }

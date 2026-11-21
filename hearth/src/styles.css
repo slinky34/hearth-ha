@@ -742,3 +742,10 @@ h3.sub { margin-top: 8px; }
 .collapsible.open .section-chevron { transform: rotate(180deg); }
 .section-body { display: flex; flex-direction: column; gap: 12px; padding: 0 20px 20px; }
 .settings { gap: 12px; }
+
+/* collapsible list cards */
+.list-head { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; }
+.list-head h2 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-count { min-width: 26px; height: 26px; padding: 0 8px; border-radius: 99px; background: var(--surface-2); display: inline-grid; place-items: center; font-weight: 800; font-size: 13px; color: var(--muted); }
+.card.todo:not(.closed) .section-chevron { transform: rotate(180deg); }
+.card.todo.closed { padding-top: 14px; padding-bottom: 14px; }
