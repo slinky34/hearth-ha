@@ -3,6 +3,7 @@ import { Check, ChevronLeft, ChevronRight, Flame, Pencil, Star, Trash2 } from 'l
 import { useMemo, useState } from 'react';
 import { Modal } from '../components/Modal';
 import { useHa } from '../lib/ha';
+import { useKiosk } from '../lib/kiosk';
 import { useStore } from '../lib/store';
 import type { Chore, Completions, Member } from '../lib/types';
 import { WEEKDAYS_SHORT, dateKey, initials, tint, uid } from '../lib/util';
@@ -32,6 +33,7 @@ function pointsFor(member: Member, chores: Chore[], completions: Completions) {
 export function ChoresView() {
   const { data, set } = useStore();
   const { selected } = useHa();
+  const { kiosk } = useKiosk();
   const { members, chores, completions } = data;
   const [day, setDay] = useState(() => startOfDay(new Date()));
   const [editing, setEditing] = useState(false);
@@ -74,9 +76,11 @@ export function ChoresView() {
             </button>
           )}
         </div>
-        <button className="btn" onClick={() => setEditing(true)}>
-          <Pencil size={18} /> Edit chores
-        </button>
+        {!kiosk && (
+          <button className="btn" onClick={() => setEditing(true)}>
+            <Pencil size={18} /> Edit chores
+          </button>
+        )}
       </div>
 
       {members.length === 0 ? (

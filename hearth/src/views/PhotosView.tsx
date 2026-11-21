@@ -1,6 +1,7 @@
 import { Play, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
+import { useKiosk } from '../lib/kiosk';
 
 export function usePhotos() {
   const [photos, setPhotos] = useState<string[]>([]);
@@ -18,6 +19,7 @@ export function PhotosView({ onSlideshow }: { onSlideshow: () => void }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [manage, setManage] = useState(false);
+  const { kiosk } = useKiosk();
 
   const upload = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -40,7 +42,7 @@ export function PhotosView({ onSlideshow }: { onSlideshow: () => void }) {
         <h1>Photos</h1>
         <div className="nav-group">
           {busy && <span className="muted">{busy}</span>}
-          {photos.length > 0 && (
+          {photos.length > 0 && !kiosk && (
             <button className={`btn ${manage ? 'on' : 'ghost'}`} onClick={() => setManage((m) => !m)}>
               {manage ? 'Done' : 'Manage'}
             </button>
@@ -64,7 +66,7 @@ export function PhotosView({ onSlideshow }: { onSlideshow: () => void }) {
           {photos.map((p) => (
             <figure key={p}>
               <img src={api.photoUrl(p)} loading="lazy" alt="" />
-              {manage && (
+              {manage && !kiosk && (
                 <button
                   className="icon-btn filled danger"
                   aria-label="Delete photo"

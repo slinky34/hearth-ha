@@ -1,5 +1,6 @@
-import { Plus, Trash2 } from 'lucide-react';
+import { Lock, Plus, Trash2 } from 'lucide-react';
 import { useHa } from '../lib/ha';
+import { useKiosk } from '../lib/kiosk';
 import { useStore } from '../lib/store';
 import type { Member, Settings } from '../lib/types';
 import { PALETTE, initials, uid } from '../lib/util';
@@ -7,6 +8,7 @@ import { PALETTE, initials, uid } from '../lib/util';
 export function SettingsView() {
   const { data, set, mode } = useStore();
   const { calendars, entities, colorOf, error } = useHa();
+  const { setKiosk } = useKiosk();
   const { members, settings } = data;
   const s = <K extends keyof Settings>(k: K, v: Settings[K]) => set('settings', (p) => ({ ...p, [k]: v }));
   const updateMember = (id: string, patch: Partial<Member>) =>
@@ -216,6 +218,32 @@ export function SettingsView() {
               ))}
             </select>
           </label>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>Kiosk mode</h2>
+        <p className="muted small">
+          For a wall tablet: goes fullscreen (hiding Home Assistant’s sidebar too), keeps the screen awake, hides the
+          cursor, and locks Settings, chore editing, and photo deletion. It only applies to this screen. To leave, hold
+          the 🏡 logo for 2 seconds or tap <b>Locked</b>. You can also open Hearth with <code>?kiosk</code> at the end of
+          its address (direct-port access) to turn it on.
+        </p>
+        <label className="pin-row">
+          <span className="muted small">PIN to leave kiosk mode (optional, digits only)</span>
+          <input
+            type="password"
+            inputMode="numeric"
+            placeholder="No PIN"
+            value={settings.kioskPin}
+            onChange={(e) => s('kioskPin', e.target.value.replace(/\D/g, '').slice(0, 8))}
+            style={{ maxWidth: 220 }}
+          />
+        </label>
+        <div>
+          <button className="btn primary" onClick={() => setKiosk(true)}>
+            <Lock size={18} /> Turn on kiosk mode on this screen
+          </button>
         </div>
       </section>
 

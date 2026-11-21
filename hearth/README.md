@@ -2,6 +2,7 @@
 
 A self-hosted, Skylight-style family wall display that runs as a Home Assistant add-on. Put any tablet on the wall and get:
 
+- **Today**: the home screen, with today's events as cards and everyone's chores in a Tasks column, plus a + button for quick events.
 - **Calendar**: day, week, and month views of your Home Assistant calendars, color-coded per family member, with weather in the week header and tonight's dinner under each day. Add events from the screen.
 - **Chores**: a per-person chore chart with stars, streaks, and a celebration when someone finishes everything.
 - **Lists**: your HA to-do lists (Shopping List, Local To-do, Todoist, and others): add, check off, clear.
@@ -22,6 +23,8 @@ Family members, chores, meals, and settings are stored in the add-on's `/data` f
 **Without GitHub:** copy the `hearth` folder into `/addons/hearth` on your HA box (with the Samba or SSH add-on). Then go to **Add-on Store → ⋮ → Check for updates** and it appears under *Local add-ons*.
 
 ### Using it on a wall tablet
+
+**Kiosk mode** (Settings → Kiosk mode, or add `?kiosk` to the direct-port address) turns a screen into a locked wall display. It goes fullscreen (hiding HA's sidebar), keeps the screen awake, hides the cursor, and locks Settings, chore editing, and photo deletion. It only applies to that device. To unlock, hold the 🏡 logo for 2 seconds or tap **Locked**, then enter the optional PIN. The PIN is a child lock, not real security.
 
 - **Simplest:** sign in to HA on the tablet and open Hearth from the sidebar (it uses ingress, so it's protected by your HA login). A kiosk browser like Fully Kiosk works well.
 - **Kiosk without an HA login:** in the add-on's **Network** settings, set a host port for `8099/tcp`, then open `http://<ha-ip>:<port>`. Anyone on your LAN can then use it, but only the calendar, to-do, and weather actions Hearth allows.

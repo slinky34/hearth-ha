@@ -36,3 +36,10 @@ export const initials = (name: string) =>
   name.trim().split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || '?';
 
 export const WEEKDAYS_SHORT = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+/** Solid pastel version of a color (mixed with white), for cards that stay light in dark mode. */
+export function pastel(hex: string, amount = 0.32) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  const mix = (c: number) => Math.round(c * amount + 255 * (1 - amount));
+  return `rgb(${mix((n >> 16) & 255)}, ${mix((n >> 8) & 255)}, ${mix(n & 255)})`;
+}

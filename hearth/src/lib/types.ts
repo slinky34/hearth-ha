@@ -35,6 +35,8 @@ export interface Settings {
   calendarColors: Record<string, string>;
   hiddenCalendars: string[];
   dayStartHour: number;
+  /** Optional PIN required to leave kiosk mode (child lock, not real security). */
+  kioskPin: string;
 }
 
 export interface StoreData {

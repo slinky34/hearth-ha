@@ -16,7 +16,7 @@ const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const PHOTO_DIR = path.resolve(process.env.PHOTO_DIR || (IN_ADDON ? '/media/hearth' : path.join(DATA_DIR, 'photos')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.1.0';
+const VERSION = process.env.HEARTH_VERSION || '0.2.0';
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 fs.mkdirSync(PHOTO_DIR, { recursive: true });

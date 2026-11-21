@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS: Settings = {
   calendarColors: { 'calendar.family': '#F2A541' },
   hiddenCalendars: [],
   dayStartHour: 7,
+  kioskPin: '',
 };
 
 function normalize(raw: Partial<StoreData>): StoreData {

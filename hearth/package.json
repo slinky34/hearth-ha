@@ -1,7 +1,7 @@
 {
   "name": "hearth",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@fontsource-variable/nunito": "^5.3.0",
+    "@fontsource-variable/source-serif-4": "^5.3.1",
     "date-fns": "^4.4.0",
     "lucide-react": "^1.77.0",
     "react": "^19.3.1",

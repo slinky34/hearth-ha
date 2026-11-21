@@ -340,7 +340,7 @@ function DayView({ day, events, onPick }: ViewProps & { day: Date }) {
   );
 }
 
-function EventDetail({ event: e, onClose }: { event: CalEvent; onClose: () => void }) {
+export function EventDetail({ event: e, onClose }: { event: CalEvent; onClose: () => void }) {
   const { colorOf, calendars } = useHa();
   const { members, settings } = useStore().data;
   const cal = calendars.find((c) => c.entity_id === e.calendar);
@@ -374,7 +374,7 @@ function EventDetail({ event: e, onClose }: { event: CalEvent; onClose: () => vo
   );
 }
 
-function AddEvent({ defaultDate, onClose, onCreated }: { defaultDate: Date; onClose: () => void; onCreated: () => void }) {
+export function AddEvent({ defaultDate, onClose, onCreated }: { defaultDate: Date; onClose: () => void; onCreated: () => void }) {
   const { calendars, selected, colorOf } = useHa();
   const { members, settings } = useStore().data;
   const preferred =
