@@ -34,6 +34,39 @@ function exitFullscreen() {
   if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined);
 }
 
+/**
+ * Keeps the screen awake while `on` (kiosk mode), using the Screen Wake Lock API.
+ * The lock drops whenever the page is hidden, so it's taken again when the page comes back,
+ * and on the next tap in case the browser wants a user gesture first.
+ */
+function useWakeLock(on: boolean) {
+  useEffect(() => {
+    const wl = (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<{ released: boolean; release: () => Promise<void> }> } }).wakeLock;
+    if (!on || !wl) return;
+    let lock: { released: boolean; release: () => Promise<void> } | null = null;
+    let alive = true;
+    const take = async () => {
+      if (!alive || document.visibilityState !== 'visible' || (lock && !lock.released)) return;
+      try {
+        lock = await wl.request('screen');
+      } catch {
+        /* not allowed right now; try again on the next tap or when the page is shown */
+      }
+    };
+    take();
+    document.addEventListener('visibilitychange', take);
+    window.addEventListener('pointerdown', take);
+    const id = setInterval(take, 60000);
+    return () => {
+      alive = false;
+      document.removeEventListener('visibilitychange', take);
+      window.removeEventListener('pointerdown', take);
+      clearInterval(id);
+      lock?.release().catch(() => undefined);
+    };
+  }, [on]);
+}
+
 interface KioskCtx {
   kiosk: boolean;
   setKiosk: (on: boolean) => void;
@@ -42,6 +75,7 @@ const Ctx = createContext<KioskCtx>({ kiosk: false, setKiosk: () => undefined })
 
 export function KioskProvider({ children }: { children: ReactNode }) {
   const [kiosk, setState] = useState(initial);
+  useWakeLock(kiosk);
 
   const setKiosk = useCallback((on: boolean) => {
     save(on);

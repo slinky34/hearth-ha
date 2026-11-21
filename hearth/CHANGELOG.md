@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.7
+- **Kiosk mode keeps the screen on:** while kiosk mode is on, Hearth asks the device to stay awake (Screen Wake Lock). Before, only Cook mode did this.
+- **Space above the sidebar:** a new setting under Settings → Sidebar (Automatic, None, Small, Medium, Large), for when something covers the top of the sidebar, such as iPad window controls.
+- Settings → Sidebar shows what Hearth detects about the screen, to help sort out tablet layout problems.
+
 ## 0.15.6
 - **iPad home-screen app:** the sidebar now starts below the window controls iPadOS draws in the top-left corner, so the Today button isn't covered anymore.
 - When Hearth is installed on a home screen, the header and sidebar leave room for the status bar.

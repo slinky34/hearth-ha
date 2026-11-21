@@ -257,7 +257,7 @@ function Shell() {
 
   return (
     <div className="app">
-      <nav className="rail">
+      <nav className="rail" style={nav.topGap === 'auto' ? undefined : { paddingTop: `calc(env(safe-area-inset-top, 0px) + ${12 + nav.topGap}px)` }}>
         <div
           className="logo"
           onPointerDown={logoDown}
