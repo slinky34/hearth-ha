@@ -7,7 +7,7 @@ import { api, whoLine } from '../lib/api';
 import { toast } from '../components/Toast';
 import { MagicImport } from '../components/MagicImport';
 import { useEvents, useHa } from '../lib/ha';
-import { useNow } from '../lib/hooks';
+import { useIsPhone, useNow } from '../lib/hooks';
 import { useStore } from '../lib/store';
 import type { CalEvent, CalendarViewMode, Member } from '../lib/types';
 import { choresFor, dateKey, eventMembers, fmtShortTime, fmtTime, pastel, stripes } from '../lib/util';
@@ -108,7 +108,16 @@ export function CalendarView() {
   const { data } = useStore();
   const { visibleCalendars, calendars, selected, error: haError } = useHa();
   const { weekStartsOn, gridDays } = data.settings;
-  const [mode, setMode] = useState<CalendarViewMode>(data.settings.calendarView);
+  const phone = useIsPhone();
+  // Week and Grid need a wide screen; phones use Schedule instead.
+  const PHONE_MODES: CalendarViewMode[] = ['day', 'schedule', 'month'];
+  const [mode, setMode] = useState<CalendarViewMode>(() =>
+    phone && !PHONE_MODES.includes(data.settings.calendarView) ? 'schedule' : data.settings.calendarView,
+  );
+  useEffect(() => {
+    if (phone && !PHONE_MODES.includes(mode)) setMode('schedule');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phone]);
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
   const [picked, setPicked] = useState<CalEvent | null>(null);
   const [addOn, setAddOn] = useState<Date | null>(null);
@@ -182,10 +191,10 @@ export function CalendarView() {
         </div>
         <div className="nav-group">
           <button className="btn magic-btn" onClick={() => setMagic(true)} disabled={calendars.length === 0}>
-            <Sparkles size={18} /> {t('Magic Import')}
+            <Sparkles size={18} /> <span className="magic-label">{t('Magic Import')}</span>
           </button>
           <div className="segmented">
-            {MODES.map((m) => (
+            {MODES.filter((m) => !phone || PHONE_MODES.includes(m.id)).map((m) => (
               <button key={m.id} className={mode === m.id ? 'on' : ''} onClick={() => setMode(m.id)}>
                 {t(m.label)}
               </button>

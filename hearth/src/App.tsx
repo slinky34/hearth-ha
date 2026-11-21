@@ -1,9 +1,9 @@
-import { Lock, Maximize, Settings as Gear } from 'lucide-react';
+import { Ellipsis, Lock, Maximize, Settings as Gear } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal } from './components/Modal';
 import { TopBar } from './components/TopBar';
 import { HaProvider } from './lib/ha';
-import { useIdle } from './lib/hooks';
+import { useIdle, useIsPhone } from './lib/hooks';
 import { KioskProvider, enterFullscreen, useKiosk } from './lib/kiosk';
 import { MusicProvider } from './lib/music';
 import { TABS } from './lib/tabs';
@@ -157,12 +157,103 @@ function Shell() {
     if (kiosk && tab === 'settings') setTab('today');
   }, [kiosk, tab]);
 
+  const views = () => (
+    <>
+          {tab === 'today' && <TodayView />}
+          {tab === 'calendar' && <CalendarView />}
+          {tab === 'chores' && <ChoresView />}
+          {tab === 'rewards' && <RewardsView />}
+          {tab === 'lists' && <ListsView />}
+          {tab === 'meals' && <MealsView />}
+          {tab === 'photos' && <PhotosView onSlideshow={() => setIdle(true)} />}
+          {tab === 'recipes' && <RecipesView openSlug={recipeToOpen} onOpened={clearRecipe} />}
+          {tab === 'music' && <MusicView />}
+          {tab === 'cameras' && <CamerasView />}
+          {tab === 'home' && <HomeView />}
+          {tab === 'settings' && !kiosk && <SettingsView />}
+    </>
+  );
+  const overlays = (
+    <>
+      {idle && <Screensaver styleOverride={previewStyle ?? undefined} onClose={() => { setIdle(false); setPreviewStyle(null); }} />}
+      {exiting && <ExitKiosk onClose={() => setExiting(false)} />}
+      <Reminders />
+      <TimerAlarm />
+      <Toaster />
+      <SleepOverlay />
+      <Doorbell />
+    </>
+  );
+
   // Long-press the logo (2 s) to leave kiosk mode.
   const logoDown = () => {
     if (!kiosk) return;
     press.current = window.setTimeout(() => setExiting(true), 2000);
   };
   const logoUp = () => clearTimeout(press.current);
+
+  // Phones get a bottom bar with four main screens; the rest live under More.
+  const phone = useIsPhone();
+  const [more, setMore] = useState(false);
+  const PRIMARY = ['today', 'calendar', 'chores', 'lists', 'meals', 'music'];
+  const phoneTabs = PRIMARY.map((id) => visibleTabs.find((x) => x.id === id)).filter(Boolean).slice(0, 4) as typeof visibleTabs;
+  const moreTabs = visibleTabs.filter((x) => !phoneTabs.includes(x));
+  const go = (id: Tab) => {
+    setTab(id);
+    setMore(false);
+  };
+
+  if (phone) {
+    const inMore = tab === 'settings' || moreTabs.some((x) => x.id === tab);
+    return (
+      <div className="app phone">
+        <main>
+          <TopBar onMusic={() => setTab('music')} />
+          {saveError && <div className="banner">{t('Couldn’t save changes')}: {saveError}</div>}
+          <div className="view">{views()}</div>
+        </main>
+        <nav className="tabbar">
+          {phoneTabs.map(({ id, label, Icon }) => (
+            <button key={id} className={tab === id ? 'on' : ''} onClick={() => go(id)}>
+              <Icon size={24} />
+              <span>{t(label)}</span>
+            </button>
+          ))}
+          <button className={inMore ? 'on' : ''} onClick={() => setMore(true)}>
+            <Ellipsis size={24} />
+            <span>{t('More')}</span>
+          </button>
+        </nav>
+        {more && (
+          <div className="sheet-backdrop" onPointerDown={(e) => e.target === e.currentTarget && setMore(false)}>
+            <div className="sheet more-sheet" role="dialog" aria-modal="true">
+              <i className="sheet-grip" />
+              <div className="more-grid">
+                {moreTabs.map(({ id, label, Icon }) => (
+                  <button key={id} className={tab === id ? 'on' : ''} onClick={() => go(id)}>
+                    <Icon size={26} />
+                    <span>{t(label)}</span>
+                  </button>
+                ))}
+                {kiosk ? (
+                  <button onClick={() => { setMore(false); setExiting(true); }}>
+                    <Lock size={26} />
+                    <span>{t('Locked')}</span>
+                  </button>
+                ) : (
+                  <button className={tab === 'settings' ? 'on' : ''} onClick={() => go('settings')}>
+                    <Gear size={26} />
+                    <span>{t('Settings')}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        {overlays}
+      </div>
+    );
+  }
 
   return (
     <div className="app">
@@ -204,28 +295,9 @@ function Shell() {
       <main>
         <TopBar onMusic={() => setTab('music')} />
         {saveError && <div className="banner">{t('Couldn’t save changes')}: {saveError}</div>}
-        <div className="view">
-          {tab === 'today' && <TodayView />}
-          {tab === 'calendar' && <CalendarView />}
-          {tab === 'chores' && <ChoresView />}
-          {tab === 'rewards' && <RewardsView />}
-          {tab === 'lists' && <ListsView />}
-          {tab === 'meals' && <MealsView />}
-          {tab === 'photos' && <PhotosView onSlideshow={() => setIdle(true)} />}
-          {tab === 'recipes' && <RecipesView openSlug={recipeToOpen} onOpened={clearRecipe} />}
-          {tab === 'music' && <MusicView />}
-          {tab === 'cameras' && <CamerasView />}
-          {tab === 'home' && <HomeView />}
-          {tab === 'settings' && !kiosk && <SettingsView />}
-        </div>
+        <div className="view">{views()}</div>
       </main>
-      {idle && <Screensaver styleOverride={previewStyle ?? undefined} onClose={() => { setIdle(false); setPreviewStyle(null); }} />}
-      {exiting && <ExitKiosk onClose={() => setExiting(false)} />}
-      <Reminders />
-      <TimerAlarm />
-      <Toaster />
-      <SleepOverlay />
-      <Doorbell />
+      {overlays}
     </div>
   );
 }

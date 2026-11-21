@@ -6,6 +6,7 @@ import { mealPlan, type PlanEntry } from '../lib/mealie';
 import { openRecipe } from './RecipesView';
 import { useEffect } from 'react';
 import { useStore } from '../lib/store';
+import { useIsPhone } from '../lib/hooks';
 import type { MealType } from '../lib/types';
 import { dateKey } from '../lib/util';
 import { dateShort, format, t } from '../lib/i18n';
@@ -21,6 +22,7 @@ export function MealsView() {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: data.settings.weekStartsOn }));
   const [editing, setEditing] = useState<string | null>(null); // `${dateKey}|${meal}`
   const [draft, setDraft] = useState('');
+  const phone = useIsPhone();
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   // Meal rows can be folded (e.g. hide Breakfast); remembered on this device.
   const [foldedRows, setFoldedRows] = useState<string[]>(() => {
@@ -74,39 +76,7 @@ export function MealsView() {
     setEditing(null);
   };
 
-  return (
-    <div className="meals">
-      <div className="view-head">
-        <div className="nav-group">
-          <button className="icon-btn" onClick={() => setWeekStart((w) => addWeeks(w, -1))} aria-label={t('Previous week')}>
-            <ChevronLeft />
-          </button>
-          <button className="icon-btn" onClick={() => setWeekStart((w) => addWeeks(w, 1))} aria-label={t('Next week')}>
-            <ChevronRight />
-          </button>
-          <h1>{t('Meals')} · {dateShort(weekStart)}</h1>
-        </div>
-      </div>
-      <div className="meal-grid">
-        <div />
-        {days.map((d) => (
-          <div key={d.toISOString()} className={`meal-day ${isToday(d) ? 'today' : ''}`}>
-            <span className="dow">{format(d, 'EEE')}</span>
-            <span className="dnum">{format(d, 'd')}</span>
-          </div>
-        ))}
-        {MEALS.map((m) => (
-          <div key={m.key} className={`meal-row ${foldedRows.includes(m.key) ? 'folded' : ''}`}>
-            <button className="meal-label" onClick={() => toggleRow(m.key)} aria-expanded={!foldedRows.includes(m.key)}>
-              <span>{m.icon}</span>
-              {t(m.label)}
-              <ChevronDown size={16} className="section-chevron" />
-            </button>
-            {foldedRows.includes(m.key) ? (
-              <button className="meal-folded" onClick={() => toggleRow(m.key)}>
-                {t('{n} planned', { n: days.filter((d) => data.meals[dateKey(d)]?.[m.key] || mealieFor(dateKey(d), m.key).length || grocyMeal(dateKey(d), m.key)).length })}
-              </button>
-            ) : days.map((d) => {
+  const cell = (d: Date, m: (typeof MEALS)[number]) => {
               const k = dateKey(d);
               const id = `${k}|${m.key}`;
               const value = data.meals[k]?.[m.key];
@@ -157,7 +127,68 @@ export function MealsView() {
                 </button>
                 )
               );
-            })}
+  };
+
+  const header = (
+    <div className="view-head">
+      <div className="nav-group">
+        <button className="icon-btn" onClick={() => setWeekStart((w) => addWeeks(w, -1))} aria-label={t('Previous week')}>
+          <ChevronLeft />
+        </button>
+        <button className="icon-btn" onClick={() => setWeekStart((w) => addWeeks(w, 1))} aria-label={t('Next week')}>
+          <ChevronRight />
+        </button>
+        <h1>{t('Meals')} · {dateShort(weekStart)}</h1>
+      </div>
+    </div>
+  );
+
+  // Phones: one card per day, meals stacked inside.
+  if (phone)
+    return (
+      <div className="meals">
+        {header}
+        <div className="meal-days">
+          {days.map((d) => (
+            <section key={d.toISOString()} className={`meal-daycard ${isToday(d) ? 'today' : ''}`}>
+              <h3>
+                <span className="dow">{format(d, 'EEEE')}</span> <span className="muted">{format(d, 'd')}</span>
+              </h3>
+              {MEALS.map((m) => (
+                <div key={m.key} className="meal-line">
+                  <span className="meal-line-label" title={t(m.label)}>{m.icon}</span>
+                  {cell(d, m)}
+                </div>
+              ))}
+            </section>
+          ))}
+        </div>
+      </div>
+    );
+
+  return (
+    <div className="meals">
+      {header}
+      <div className="meal-grid">
+        <div />
+        {days.map((d) => (
+          <div key={d.toISOString()} className={`meal-day ${isToday(d) ? 'today' : ''}`}>
+            <span className="dow">{format(d, 'EEE')}</span>
+            <span className="dnum">{format(d, 'd')}</span>
+          </div>
+        ))}
+        {MEALS.map((m) => (
+          <div key={m.key} className={`meal-row ${foldedRows.includes(m.key) ? 'folded' : ''}`}>
+            <button className="meal-label" onClick={() => toggleRow(m.key)} aria-expanded={!foldedRows.includes(m.key)}>
+              <span>{m.icon}</span>
+              {t(m.label)}
+              <ChevronDown size={16} className="section-chevron" />
+            </button>
+            {foldedRows.includes(m.key) ? (
+              <button className="meal-folded" onClick={() => toggleRow(m.key)}>
+                {t('{n} planned', { n: days.filter((d) => data.meals[dateKey(d)]?.[m.key] || mealieFor(dateKey(d), m.key).length || grocyMeal(dateKey(d), m.key)).length })}
+              </button>
+            ) : days.map((d) => cell(d, m))}
           </div>
         ))}
       </div>

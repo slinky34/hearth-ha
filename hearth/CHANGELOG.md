@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.0
+- **Redesigned phone layout:** a proper phone app instead of a squeezed tablet screen.
+  - A bottom bar with Today, Calendar, Tasks, and Lists. Everything else is under **More**.
+  - A compact header that stays put. The family filter scrolls sideways.
+  - Today and Tasks stack each person top to bottom, instead of columns you swipe sideways.
+  - Calendar offers Day, Schedule, and Month on phones.
+  - Meals shows one card per day.
+  - Pop-ups open as bottom sheets that fit the screen.
+- The status bar color matches the app, and iPhone no longer zooms in when you tap a text field.
+
 ## 0.13.0
 - **Cameras screen:** live snapshots from any Home Assistant cameras (Frigate, UniFi Protect, Reolink, and others). Tap a camera for full-screen live video.
 - **Frigate detections:** a feed of recent person, car, package, and animal detections with thumbnails. Set the new **frigate_url** add-on option (for example `http://ccab4aaf-frigate:5000`).

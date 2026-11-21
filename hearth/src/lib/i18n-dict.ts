@@ -13,6 +13,7 @@ export const DICT: Record<string, string[]> = {
   "Music": ["Musik", "Música", "Musique", "Musica", "音楽", "음악", "Muziek", "Música"],
   "Home": ["Zuhause", "Casa", "Maison", "Casa", "ホーム", "홈", "Thuis", "Casa"],
   "Settings": ["Einstellungen", "Ajustes", "Réglages", "Impostazioni", "設定", "설정", "Instellingen", "Ajustes"],
+  "More": ["Mehr", "Más", "Plus", "Altro", "その他", "더보기", "Meer", "Mais"],
   "Full": ["Vollbild", "Completa", "Plein", "Schermo", "全画面", "전체", "Volledig", "Inteira"],
   "Locked": ["Gesperrt", "Bloqueado", "Verrouillé", "Bloccato", "ロック中", "잠김", "Vergrendeld", "Bloqueado"],
 
