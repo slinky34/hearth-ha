@@ -10,6 +10,7 @@ import { choresFor, dateKey, eventMembers, fmtTime, pastel, stripes } from '../l
 import { EventDetail, MemberStrip } from './CalendarView';
 import { QuickAdd } from '../components/QuickAdd';
 import { NotesBoard } from '../components/NotesBoard';
+import { TodayCamera } from '../components/TodayCamera';
 import { useLeaveBy } from '../lib/travel';
 import { t } from '../lib/i18n';
 
@@ -147,6 +148,7 @@ export function TodayView() {
               </section>
             );
           })}
+          <TodayCamera />
         </div>
         {fab}
         {modals}
@@ -176,6 +178,7 @@ export function TodayView() {
         ) : (
           <div className="today-task-list">{tasks.map(({ chore, member }) => taskRow(chore, member, shownMembers.length > 1))}</div>
         )}
+        <TodayCamera asColumn={false} />
       </aside>
       {fab}
       {modals}

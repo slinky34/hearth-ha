@@ -1061,3 +1061,21 @@ button.meal-label { text-align: left; align-items: flex-start; }
 .meal-source { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px; border-radius: 14px; background: var(--surface-2); }
 .meal-source p { margin: 0; }
 @media (max-width: 760px) { .modal footer .btn.danger { flex: 0 0 auto; } .modal footer .grow { display: none; } }
+
+/* Today: live camera column */
+.cam-col { --member: #64748b; }
+.cam-avatar { background: #2b3340; color: #fff; }
+.cam-col .person-head h2, .cam-card .person-head h2 { text-transform: capitalize; }
+.today-live { display: block; width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; overflow: hidden; background: #111; flex-shrink: 0; }
+.today-live img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.today-det { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 0; border-bottom: 1px solid var(--border); text-align: left; }
+.today-det img { width: 64px; height: 48px; border-radius: 8px; object-fit: cover; background: #111; flex-shrink: 0; }
+.today-det .grow { display: flex; flex-direction: column; min-width: 0; }
+.today-det b { text-transform: capitalize; font-size: 15px; }
+.today-det .small { text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cam-card { display: flex; flex-direction: column; gap: 10px; margin-top: 18px; }
+.cam-card .person-head h2 { font-size: 18px; }
+@media (min-width: 761px) {
+  .today-split:has(> .cam-col) { grid-auto-columns: minmax(200px, 1fr); }
+  .cam-col .person-head h2 { font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+}

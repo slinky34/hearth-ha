@@ -14,6 +14,7 @@ import { toast } from '../components/Toast';
 import { ImmichSettings } from '../components/ImmichSettings';
 import { SS_STYLES } from './Screensaver';
 import { TABS } from '../lib/tabs';
+import { useAllCameras } from '../lib/cameras';
 import { useStore } from '../lib/store';
 import type { Member, Settings } from '../lib/types';
 import { PALETTE, uid } from '../lib/util';
@@ -31,7 +32,7 @@ export function SettingsView() {
   const players = entities.filter((e) => e.entity_id.startsWith('media_player.'));
   const persons = entities.filter((e) => e.entity_id.startsWith('person.'));
   const ttsEngines = entities.filter((e) => e.entity_id.startsWith('tts.'));
-  const cameras = entities.filter((e) => e.entity_id.startsWith('camera.'));
+  const cameras = useAllCameras();
   const doorbellTriggers = entities.filter((e) => e.entity_id.startsWith('binary_sensor.') || e.entity_id.startsWith('event.'));
   const screenSwitches = entities.filter((e) => /^(switch|light|input_boolean)\./.test(e.entity_id));
   const restoreInput = useRef<HTMLInputElement>(null);
@@ -474,6 +475,28 @@ export function SettingsView() {
           <input type="checkbox" checked={settings.cameras.detections} onChange={(e) => s('cameras', { ...settings.cameras, detections: e.target.checked })} />
           {t('Show recent Frigate detections')}
         </label>
+        <h3 className="today-label">{t('Today screen')}</h3>
+        <div className="settings-grid">
+          <label className="row check-row">
+            <input type="checkbox" checked={settings.cameras.today.show} onChange={(e) => s('cameras', { ...settings.cameras, today: { ...settings.cameras.today, show: e.target.checked } })} />
+            {t('Show a live camera on Today')}
+          </label>
+          {settings.cameras.today.show && (
+            <>
+              <label>
+                {t('Camera')}
+                <select value={settings.cameras.today.camera} onChange={(e) => s('cameras', { ...settings.cameras, today: { ...settings.cameras.today, camera: e.target.value } })}>
+                  <option value="">{t('First chosen camera')}</option>
+                  {cameras.map((x) => <option key={x.entity_id} value={x.entity_id}>{x.name}</option>)}
+                </select>
+              </label>
+              <label className="row check-row">
+                <input type="checkbox" checked={settings.cameras.today.detections} onChange={(e) => s('cameras', { ...settings.cameras, today: { ...settings.cameras.today, detections: e.target.checked } })} />
+                {t('Show latest detections next to it')}
+              </label>
+            </>
+          )}
+        </div>
         {settings.cameras.detections && (
           <div className="chips">
             {['person', 'car', 'package', 'dog', 'cat', 'bicycle'].map((l) => {

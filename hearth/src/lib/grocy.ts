@@ -4,7 +4,24 @@ import type { HaState } from './types';
 
 // Grocy through the Home Assistant Grocy integration (custom-components/grocy).
 // Its sensors carry their data in an attribute array; the key varies by version, so take the first array.
-const IDS = ['sensor.grocy_shopping_list', 'sensor.grocy_chores', 'sensor.grocy_expiring_products', 'sensor.grocy_meal_plan'];
+const KEYS = ['shopping_list', 'chores', 'expiring_products', 'meal_plan'] as const;
+
+// Find each sensor by the key in its registry id (names can be renamed or translated), else by the default name.
+let idsPromise: Promise<string[]> | null = null;
+function grocyIds(): Promise<string[]> {
+  idsPromise ??= fetch('api/integration_entities/grocy')
+    .then((r) => (r.ok ? r.json() : []))
+    .catch(() => [])
+    .then((list: { entity_id: string; key: string }[]) => {
+      const ents = Array.isArray(list) ? list : [];
+      return KEYS.map((k) => {
+        const hits = ents.filter((e) => e.key.endsWith(k) || e.entity_id.endsWith(`_${k}`) || e.entity_id.endsWith(`.${k}`));
+        // Prefer the sensor (it carries the item list) over a binary_sensor with the same key.
+        return (hits.find((e) => e.entity_id.startsWith('sensor.')) ?? hits[0])?.entity_id ?? `sensor.grocy_${k}`;
+      });
+    });
+  return idsPromise;
+}
 
 function arr(s: HaState | undefined): any[] {
   if (!s) return [];
@@ -30,6 +47,7 @@ export function useGrocy() {
   const [g, setG] = useState<Grocy>(EMPTY);
   const load = useCallback(async () => {
     try {
+      const IDS = await grocyIds();
       const states = await api.states({ ids: IDS });
       const by = (id: string) => states.find((s) => s.entity_id === id);
       const shop = by(IDS[0]);

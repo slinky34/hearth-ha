@@ -2,6 +2,7 @@ import { BellRing, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { t } from '../lib/i18n';
+import { LiveImg } from './CameraParts';
 import { softChime } from '../lib/sound';
 import { useStore } from '../lib/store';
 
@@ -9,7 +10,6 @@ import { useStore } from '../lib/store';
 export function Doorbell() {
   const { doorbell } = useStore().data.settings;
   const [open, setOpen] = useState(false);
-  const [tick, setTick] = useState(0);
   const last = useRef<string | null>(null);
   const timer = useRef(0);
 
@@ -40,11 +40,6 @@ export function Doorbell() {
     return () => clearInterval(id);
   }, [doorbell.trigger, doorbell.camera, doorbell.seconds]);
 
-  useEffect(() => {
-    if (!open) return;
-    const id = setInterval(() => setTick((x) => x + 1), 1000);
-    return () => clearInterval(id);
-  }, [open]);
 
   if (!open) return null;
   return (
@@ -56,7 +51,7 @@ export function Doorbell() {
             <X />
           </button>
         </header>
-        <img src={`${api.cameraUrl(doorbell.camera)}?t=${tick}`} alt="" />
+        <LiveImg cam={doorbell.camera} h={720} fps={12} />
       </div>
     </div>
   );

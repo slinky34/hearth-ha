@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.0
+- **Frigate live view:** Frigate's own cameras appear on the Cameras screen and stream live straight from Frigate, which is smoother than going through Home Assistant. With no cameras chosen, every Frigate camera shows.
+- **Live camera on Today:** a camera column on Today with live video and the latest detections. Tap the video for full screen, or a detection for its snapshot. Choose the camera, or turn it off, under Settings → Cameras → Today screen.
+- **Doorbell:** Frigate cameras can be picked as the doorbell camera, and the pop-up now plays live video instead of a still that refreshes every second.
+- **Grocy detection:** Hearth now finds Grocy's sensors through Home Assistant's entity registry, so renamed or translated sensors work. It also checks installed integrations in a way that works from inside the add-on.
+- Video streams pause while the screen is hidden.
+
 ## 0.14.2
 - **Frigate is found automatically.** If the Frigate address doesn't answer, or isn't set, Hearth looks for a running Frigate add-on (regular, Full Access, or Beta) and connects to it. The Frigate address is now only needed when Frigate runs on another machine.
 - Settings → Integrations shows which Frigate address Hearth is using, and clearer help when it can't connect.

@@ -15,7 +15,7 @@ const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.14.2';
+const VERSION = process.env.HEARTH_VERSION || '0.15.0';
 
 // Add-on options (set on the add-on's Configuration tab in Home Assistant).
 let options = {};
@@ -459,6 +459,45 @@ async function route(req, res) {
     const list = await r.json();
     return send(res, 200, list.map((e) => ({ id: e.id, camera: e.camera, label: e.label, sub_label: Array.isArray(e.sub_label) ? e.sub_label[0] : e.sub_label, start: e.start_time, end: e.end_time, score: e.top_score ?? e.data?.top_score ?? e.score })));
   }
+  // Frigate's own cameras: list, latest still, and live MJPEG (lower latency than going through HA).
+  if (p === '/api/frigate/cameras' && m === 'GET') {
+    if (mock) return send(res, 200, ['front_door', 'driveway', 'backyard']);
+    const fb = await resolveFrigate();
+    if (!fb) return send(res, 200, []);
+    try {
+      const r = await fetch(`${fb}/api/config`, { signal: AbortSignal.timeout(8000) });
+      if (!r.ok) return send(res, 200, []);
+      const cfg = await r.json();
+      return send(res, 200, Object.entries(cfg.cameras || {}).filter(([, c]) => c?.enabled !== false).map(([n]) => n));
+    } catch {
+      return send(res, 200, []);
+    }
+  }
+  match = p.match(/^\/api\/frigate\/(live|latest)\/([\w-]{1,64})$/);
+  if (match && m === 'GET') {
+    const [, kind, cam] = match;
+    const h = Math.min(1080, Math.max(120, parseInt(url.searchParams.get('h') || '480', 10) || 480));
+    const fps = Math.min(15, Math.max(1, parseInt(url.searchParams.get('fps') || '8', 10) || 8));
+    if (mock) return send(res, 200, mock.cameraSnapshot(`camera.${cam}`), { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store' });
+    const fb = await resolveFrigate();
+    if (!fb) return send(res, 404, 'Frigate is not set up');
+    if (kind === 'latest') {
+      const r = await fetch(`${fb}/api/${cam}/latest.jpg?h=${h}`, { signal: AbortSignal.timeout(10000) }).catch(() => null);
+      if (!r?.ok) return send(res, r?.status || 502, 'Unavailable');
+      return send(res, 200, Buffer.from(await r.arrayBuffer()), { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' });
+    }
+    const ctrl = new AbortController();
+    req.on('close', () => ctrl.abort());
+    const r = await fetch(`${fb}/api/${cam}?fps=${fps}&h=${h}`, { signal: ctrl.signal }).catch(() => null);
+    if (!r?.ok || !r.body) return send(res, r?.status || 502, 'Stream unavailable');
+    res.writeHead(200, { 'Content-Type': r.headers.get('content-type') || 'multipart/x-mixed-replace;boundary=frame', 'Cache-Control': 'no-store' });
+    try {
+      for await (const chunk of r.body) res.write(chunk);
+    } catch {
+      /* viewer closed */
+    }
+    return res.end();
+  }
   match = p.match(/^\/api\/frigate\/(thumbnail|snapshot)\/([\w.-]{5,80})$/);
   if (match && m === 'GET') {
     if (mock) return send(res, 200, mock.cameraSnapshot('event'), { 'Content-Type': 'image/svg+xml' });
@@ -560,21 +599,25 @@ async function route(req, res) {
     }
   }
 
+  // Which entities belong to an integration (Grocy's sensor names vary).
+  match = p.match(/^\/api\/integration_entities\/(grocy)$/);
+  if (match && m === 'GET') return send(res, 200, await integrationEntities(match[1]).catch(() => []));
+
   // --- what's connected (Settings → Integrations) ---
   if (p === '/api/integrations' && m === 'GET') {
-    const [entries, states, targets] = await Promise.all([
-      ha('GET', '/config/config_entries/entry').catch(() => ({ data: [] })),
+    const [domains, states, targets, grocyEnts] = await Promise.all([
+      loadedDomains().catch(() => new Set()),
       ha('GET', '/states').catch(() => ({ data: [] })),
       notifyTargets().catch(() => []),
+      integrationEntities('grocy').catch(() => []),
     ]);
-    const domains = new Set((Array.isArray(entries.data) ? entries.data : []).filter((e) => e.state === 'loaded').map((e) => e.domain));
     const st = Array.isArray(states.data) ? states.data : [];
     const count = (d) => st.filter((x) => x.entity_id.startsWith(d + '.')).length;
     return send(res, 200, {
       mode,
       domains: [...domains],
       counts: { calendar: count('calendar'), todo: count('todo'), weather: count('weather'), media_player: count('media_player'), notify: targets.length },
-      grocy: domains.has('grocy') || st.some((x) => x.entity_id.startsWith('sensor.grocy_')),
+      grocy: domains.has('grocy') || grocyEnts.length > 0 || st.some((x) => x.entity_id.startsWith('sensor.grocy_')),
       taskmate: domains.has('taskmate') || st.some((x) => x.entity_id.endsWith('_overview') && Array.isArray(x.attributes?.children)),
       barAssistant: await barStatus(),
       immich: await immichStatus(),
@@ -707,6 +750,40 @@ const server = http.createServer((req, res) => {
 });
 
 
+
+// ---------- what HA has installed ----------
+// Loaded integrations (websocket works from inside an add-on; REST is the fallback).
+let domainsCache = { at: 0, set: new Set() };
+async function loadedDomains() {
+  if (Date.now() - domainsCache.at < 60000) return domainsCache.set;
+  let list = null;
+  try {
+    list = await haWs('config_entries/get');
+  } catch {
+    const r = await ha('GET', '/config/config_entries/entry').catch(() => null);
+    list = r?.data;
+  }
+  const set = new Set((Array.isArray(list) ? list : []).filter((e) => e.state === 'loaded').map((e) => e.domain));
+  domainsCache = { at: Date.now(), set };
+  return set;
+}
+
+// Entities an integration created, from the entity registry (names can be anything, even translated).
+const regCache = {};
+async function integrationEntities(platform) {
+  const c = regCache[platform];
+  if (c && Date.now() - c.at < 5 * 60000) return c.list;
+  let list = [];
+  try {
+    const reg = await haWs('config/entity_registry/list');
+    list = (Array.isArray(reg) ? reg : []).filter((e) => e.platform === platform && !e.disabled_by).map((e) => ({ entity_id: e.entity_id, key: String(e.unique_id || '') }));
+  } catch {
+    const r = await ha('POST', '/template', { template: `{{ integration_entities('${platform}') | list | tojson }}` }).catch(() => null);
+    if (Array.isArray(r?.data)) list = r.data.map((id) => ({ entity_id: id, key: '' }));
+  }
+  regCache[platform] = { at: Date.now(), list };
+  return list;
+}
 
 let homeLoc = null;
 
