@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.6
+- **iPad home-screen app:** the sidebar now starts below the window controls iPadOS draws in the top-left corner, so the Today button isn't covered anymore.
+- When Hearth is installed on a home screen, the header and sidebar leave room for the status bar.
+
 ## 0.15.5
 - **All Frigate cameras show:** the camera pickers list every camera in Frigate's config, including ones switched off at the moment.
 - The Frigate camera list refreshes by itself. Before, if the first check came back empty, the cameras stayed missing until you reloaded.
