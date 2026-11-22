@@ -4,7 +4,7 @@ import { Modal } from './components/Modal';
 import { TopBar } from './components/TopBar';
 import { HaProvider } from './lib/ha';
 import { useIdle, useIsPhone } from './lib/hooks';
-import { KioskProvider, enterFullscreen, useKiosk } from './lib/kiosk';
+import { KioskProvider, canFullscreen, enterFullscreen, useKiosk } from './lib/kiosk';
 import { MusicProvider } from './lib/music';
 import { TABS } from './lib/tabs';
 import { PresenceProvider } from './lib/presence';
@@ -315,7 +315,7 @@ function Shell() {
           </>
         ) : (
           <>
-            {nav.showFull && <button className="rail-btn full" onClick={enterFullscreen} title="Fullscreen">
+            {nav.showFull && canFullscreen() && <button className="rail-btn full" onClick={enterFullscreen} title="Fullscreen">
               <Maximize size={22} />
               <span>{t('Full')}</span>
             </button>}

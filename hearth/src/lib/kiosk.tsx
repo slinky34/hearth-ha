@@ -25,35 +25,72 @@ function save(on: boolean) {
   }
 }
 
+type FsDoc = Document & { webkitFullscreenElement?: Element | null; webkitFullscreenEnabled?: boolean; webkitExitFullscreen?: () => void };
+type FsEl = HTMLElement & { webkitRequestFullscreen?: () => void };
+
+/** Home-screen apps are already as full screen as the device allows. */
+export const isStandalone = () =>
+  window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+
+/** Whether this browser can go fullscreen at all (iPhone Safari and home-screen apps can't). */
+export function canFullscreen() {
+  const d = document as FsDoc;
+  return !isStandalone() && !!(d.fullscreenEnabled || d.webkitFullscreenEnabled);
+}
+
 export function enterFullscreen() {
-  const el = document.documentElement;
-  if (document.fullscreenElement || !el.requestFullscreen) return;
-  el.requestFullscreen({ navigationUI: 'hide' }).catch(() => undefined);
+  const d = document as FsDoc;
+  const el = document.documentElement as FsEl;
+  if (d.fullscreenElement || d.webkitFullscreenElement) return true;
+  if (el.requestFullscreen) {
+    el.requestFullscreen({ navigationUI: 'hide' }).catch(() => undefined);
+    return true;
+  }
+  if (el.webkitRequestFullscreen) {
+    el.webkitRequestFullscreen();
+    return true;
+  }
+  return false;
 }
 function exitFullscreen() {
-  if (document.fullscreenElement) document.exitFullscreen().catch(() => undefined);
+  const d = document as FsDoc;
+  if (d.fullscreenElement) d.exitFullscreen().catch(() => undefined);
+  else if (d.webkitFullscreenElement) d.webkitExitFullscreen?.();
 }
 
 /**
  * Keeps the screen awake while `on` (kiosk mode). Two layers, because iPads are unreliable here:
- *  1. the Screen Wake Lock API, taken again whenever it drops;
- *  2. a tiny muted looping video (1 KB, invisible), which iOS treats as "something is playing".
- * Both are retried when the page comes back and on the next tap, in case a gesture is needed.
+ *  1. the Screen Wake Lock API (only over https, so it's missing at http://<ip>:8099);
+ *  2. a tiny invisible video with a silent sound track. Safari keeps the screen on for a playing
+ *     video only if it has sound, isn't muted and isn't set to loop, so we rewind it ourselves.
+ *     Playing sound needs a real tap, so it starts on the first tap after kiosk mode turns on.
  */
+type Lock = { released: boolean; release: () => Promise<void> };
 function useWakeLock(on: boolean) {
   useEffect(() => {
-    const wl = (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<{ released: boolean; release: () => Promise<void> }> } }).wakeLock;
+    const wl = (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<Lock> } }).wakeLock;
     if (!on) return;
-    let lock: { released: boolean; release: () => Promise<void> } | null = null;
+    // Don't pause music from other apps on the tablet (Safari 17+).
+    const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+    if (session) session.type = 'ambient';
+    let lock: Lock | null = null;
     let alive = true;
     const video = document.createElement('video');
     video.src = 'keepawake.mp4';
-    video.muted = true;
-    video.loop = true;
     video.playsInline = true;
+    video.preload = 'auto';
     video.setAttribute('playsinline', '');
     video.setAttribute('aria-hidden', 'true');
     video.style.cssText = 'position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:0.01;pointer-events:none;z-index:-1';
+    const rewind = () => {
+      if (video.duration && video.currentTime > video.duration - 1) video.currentTime = 0;
+    };
+    const again = () => {
+      video.currentTime = 0;
+      video.play().catch(() => undefined);
+    };
+    video.addEventListener('timeupdate', rewind);
+    video.addEventListener('ended', again);
     document.body.appendChild(video);
     const take = async () => {
       if (!alive || document.visibilityState !== 'visible') return;
@@ -66,17 +103,21 @@ function useWakeLock(on: boolean) {
       }
     };
     take();
+    // click/touchend count as a real tap on iPad; pointerdown doesn't.
     document.addEventListener('visibilitychange', take);
-    window.addEventListener('pointerdown', take);
+    window.addEventListener('click', take, true);
+    window.addEventListener('touchend', take, true);
     const id = setInterval(take, 20000);
     return () => {
       alive = false;
       document.removeEventListener('visibilitychange', take);
-      window.removeEventListener('pointerdown', take);
+      window.removeEventListener('click', take, true);
+      window.removeEventListener('touchend', take, true);
       clearInterval(id);
       lock?.release().catch(() => undefined);
       video.pause();
       video.remove();
+      if (session) session.type = 'auto';
     };
   }, [on]);
 }
@@ -100,7 +141,7 @@ export function KioskProvider({ children }: { children: ReactNode }) {
       url.searchParams.delete('kiosk');
       history.replaceState(null, '', url);
     }
-    if (on) enterFullscreen();
+    if (on && canFullscreen()) enterFullscreen();
     else exitFullscreen();
   }, []);
 
@@ -108,17 +149,9 @@ export function KioskProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.toggle('kiosk', kiosk);
     if (!kiosk) return;
 
-    // Browsers only allow fullscreen from a tap, so re-enter it on the next touch.
-    const onTap = () => enterFullscreen();
-    // Keep the screen awake (needs https or localhost; Fully Kiosk etc. can do this too).
-    let lock: { release: () => Promise<void> } | null = null;
-    const wake = async () => {
-      try {
-        if (document.visibilityState === 'visible' && 'wakeLock' in navigator)
-          lock = await (navigator as any).wakeLock.request('screen');
-      } catch {
-        /* not allowed here */
-      }
+    // Browsers only allow fullscreen from a tap, so re-enter it on the next one.
+    const onTap = () => {
+      if (canFullscreen()) enterFullscreen();
     };
     // Hide the mouse cursor after a few seconds without movement.
     let cursorTimer = 0;
@@ -129,20 +162,16 @@ export function KioskProvider({ children }: { children: ReactNode }) {
     };
     const noMenu = (e: Event) => e.preventDefault();
 
-    wake();
     onMove();
-    window.addEventListener('pointerdown', onTap);
+    window.addEventListener('click', onTap);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('contextmenu', noMenu);
-    document.addEventListener('visibilitychange', wake);
     return () => {
-      window.removeEventListener('pointerdown', onTap);
+      window.removeEventListener('click', onTap);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('contextmenu', noMenu);
-      document.removeEventListener('visibilitychange', wake);
       clearTimeout(cursorTimer);
       document.documentElement.classList.remove('hide-cursor');
-      lock?.release().catch(() => undefined);
     };
   }, [kiosk]);
 

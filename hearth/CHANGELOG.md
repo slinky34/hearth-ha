@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.10
+- **Kiosk keep-awake that works on iPad:** 0.15.9's video didn't count, because Safari only keeps the screen on for a video that has sound, isn't muted, and isn't set to loop. The keep-awake video now has a silent sound track (3.7 KB), plays unmuted, and Hearth rewinds it itself. It starts on the first tap after kiosk mode turns on or the page reloads (Safari needs a tap before anything with sound can play). On Safari 17+, it doesn't pause music from other apps.
+- The wake lock and full screen now retry on a real tap (click). iPads don't count a finger touching down as a tap, so the earlier retries never worked there.
+- **Full button:** hidden where full screen isn't possible, such as an app added to the Home Screen (already as full screen as iPadOS allows) and iPhone Safari. Older iPadOS Safari now goes full screen too.
+- Note: when you open Hearth at `http://<ip>:8099`, the browser blocks the Screen Wake Lock (it needs https), so the video is what keeps the screen on there.
+
 ## 0.15.9
 - **Kiosk mode keeps iPads awake:** along with the wake lock, kiosk mode now plays a tiny invisible, silent video on a loop (1 KB). iPads treat it as something playing and don't auto-lock, even where the wake lock is ignored or dropped. It stops as soon as kiosk mode is off.
 - Hearth checks every 20 seconds, and on every tap, that keep-awake is still running.
