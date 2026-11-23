@@ -488,6 +488,7 @@ export function createMockHA() {
           console.log(`[mock tts] ${body.media_player_entity_id}: ${body.message}`);
           return ok([]);
         case 'music_assistant.play_media':
+          console.log(`[mock play_media] ${body.enqueue}: ${JSON.stringify(body.media_id).slice(0, 120)}`);
           if (entities.some((e) => !MASS.has(e)))
             return { status: 400, data: { message: `Entity ${entities[0]} is not a Music Assistant player` } };
           for (const e of entities) if (players[e]) Object.assign(players[e], { state: 'playing', track: (players[e].track + 1) % TRACKS.length, started: Date.now() });

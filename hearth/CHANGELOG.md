@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.15.11
+- **Tapping a song in a playlist plays that song:** Hearth now starts the tapped song by itself, then queues the rest of the list after it. Before, it sent the song plus everything after it as one list, so with shuffle on the speaker usually started a different song, and long playlists could be slow to start.
+
 ## 0.15.10
 - **Kiosk keep-awake that works on iPad:** 0.15.9's video didn't count, because Safari only keeps the screen on for a video that has sound, isn't muted, and isn't set to loop. The keep-awake video now has a silent sound track (3.7 KB), plays unmuted, and Hearth rewinds it itself. It starts on the first tap after kiosk mode turns on or the page reloads (Safari needs a tap before anything with sound can play). On Safari 17+, it doesn't pause music from other apps.
 - The wake lock and full screen now retry on a real tap (click). iPads don't count a finger touching down as a tap, so the earlier retries never worked there.

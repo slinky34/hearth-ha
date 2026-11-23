@@ -274,6 +274,15 @@ export function MusicView() {
               setOpen(null);
             }
           }}
+          onPlayFrom={async (ids) => {
+            // Start the tapped song on its own so it's what plays (even with shuffle on), then queue the rest after it.
+            const id = playTarget.id;
+            if (!(await call('music_assistant.play_media', { media_id: ids[0], media_type: 'track', enqueue: 'replace' }, id))) return;
+            select(id);
+            setOpen(null);
+            for (let i = 1; i < ids.length; i += 100)
+              await call('music_assistant.play_media', { media_id: ids.slice(i, i + 100), media_type: 'track', enqueue: 'add' }, id);
+          }}
           onShuffle={() => call('media_player.shuffle_set', { shuffle: true }, playTarget.id)}
         />
       )}
@@ -287,11 +296,12 @@ interface Track {
   sub?: string;
 }
 
-function TrackList({ item, player, onClose, onPlay, onShuffle }: {
+function TrackList({ item, player, onClose, onPlay, onPlayFrom, onShuffle }: {
   item: LibItem;
   player: Player;
   onClose: () => void;
   onPlay: (data: Record<string, unknown>) => void;
+  onPlayFrom: (ids: string[]) => void;
   onShuffle: () => Promise<boolean>;
 }) {
   const [tracks, setTracks] = useState<Track[] | null>(null);
@@ -350,7 +360,7 @@ function TrackList({ item, player, onClose, onPlay, onShuffle }: {
             {tracks.map((tr, k) => (
               <li key={tr.id}>
                 {/* Play this song and the rest of the list after it. */}
-                <button onClick={() => onPlay({ media_id: tracks.slice(k).map((x) => x.id), media_type: 'track', enqueue: 'replace' })}>
+                <button onClick={() => onPlayFrom(tracks.slice(k).map((x) => x.id))}>
                   <span className="track-num">{k + 1}</span>
                   <span className="grow">
                     <b>{tr.title}</b>
