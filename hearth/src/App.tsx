@@ -8,6 +8,7 @@ import { KioskProvider, canFullscreen, enterFullscreen, useKiosk } from './lib/k
 import { MusicProvider } from './lib/music';
 import { TABS } from './lib/tabs';
 import { PresenceProvider } from './lib/presence';
+import { api } from './lib/api';
 import { StoreProvider, useStore } from './lib/store';
 import { WeatherProvider } from './lib/weather';
 import { applyPalette } from './lib/themes';
@@ -49,13 +50,19 @@ function ExitKiosk({ onClose, onSettings }: { onClose: () => void; onSettings?: 
   const { data } = useStore();
   const { setKiosk } = useKiosk();
   const [pin, setPin] = useState('');
-  const [err, setErr] = useState(false);
-  const pinSet = Boolean(data.settings.kioskPin);
-  const unlock = () => {
-    if (pinSet && pin !== data.settings.kioskPin) {
-      setErr(true);
-      setPin('');
-      return;
+  const [err, setErr] = useState<string | false>(false);
+  const [busy, setBusy] = useState(false);
+  const pinSet = Boolean(data.settings.hasKioskPin);
+  const unlock = async () => {
+    if (pinSet) {
+      setBusy(true);
+      const r = await api.checkPin(pin).catch((e: Error) => ({ ok: false, error: e.message }));
+      setBusy(false);
+      if (!r.ok) {
+        setErr('error' in r ? r.error : t('Wrong PIN.'));
+        setPin('');
+        return;
+      }
     }
     if (onSettings) onSettings();
     else setKiosk(false);
@@ -70,7 +77,7 @@ function ExitKiosk({ onClose, onSettings }: { onClose: () => void; onSettings?: 
           <button className="btn ghost" onClick={onClose}>
             {t('Cancel')}
           </button>
-          <button className="btn primary" onClick={unlock}>
+          <button className="btn primary" onClick={unlock} disabled={busy}>
             {t('Unlock')}
           </button>
         </>
@@ -95,7 +102,7 @@ function ExitKiosk({ onClose, onSettings }: { onClose: () => void; onSettings?: 
             onKeyDown={(e) => e.key === 'Enter' && unlock()}
           />
         )}
-        {err && <p className="error">{t('Wrong PIN.')}</p>}
+        {err && <p className="error">{err}</p>}
       </div>
     </Modal>
   );
@@ -164,7 +171,7 @@ function Shell() {
   }, [kiosk, tab, settingsOpen]);
   const openSettings = () => {
     if (!kiosk) return setTab('settings');
-    if (!data.settings.kioskPin) {
+    if (!data.settings.hasKioskPin) {
       setSettingsOpen(true);
       setTab('settings');
     } else setAskSettings(true);

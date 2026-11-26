@@ -6,6 +6,7 @@ import { useHa } from '../lib/ha';
 import { t } from '../lib/i18n';
 import { useKiosk } from '../lib/kiosk';
 import { Avatar } from '../lib/presence';
+import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 import type { Member, Redemption, Reward } from '../lib/types';
 import { uid } from '../lib/util';
@@ -21,10 +22,16 @@ export function useBalances() {
 }
 
 function PinCheck({ onOk, onClose }: { onOk: () => void; onClose: () => void }) {
-  const { settings } = useStore().data;
   const [pin, setPin] = useState('');
-  const [bad, setBad] = useState(false);
-  const go = () => (pin === settings.kioskPin ? onOk() : (setBad(true), setPin('')));
+  const [bad, setBad] = useState<string | false>(false);
+  const go = async () => {
+    const r = await api.checkPin(pin).catch((e: Error) => ({ ok: false, error: e.message }));
+    if (r.ok) onOk();
+    else {
+      setBad('error' in r ? r.error : t('Wrong PIN.'));
+      setPin('');
+    }
+  };
   return (
     <Modal
       title={t('Parent PIN')}
@@ -40,7 +47,7 @@ function PinCheck({ onOk, onClose }: { onOk: () => void; onClose: () => void }) 
         <input autoFocus className="big pin-input" type="password" inputMode="numeric" value={pin}
           onChange={(e) => { setPin(e.target.value.replace(/\D/g, '')); setBad(false); }}
           onKeyDown={(e) => e.key === 'Enter' && go()} />
-        {bad && <p className="error">{t('Wrong PIN.')}</p>}
+        {bad && <p className="error">{bad}</p>}
       </div>
     </Modal>
   );
@@ -59,7 +66,7 @@ export function RewardsView() {
   const pending = redemptions.filter((r) => r.status === 'pending');
   const recent = redemptions.filter((r) => r.status === 'approved').slice(-6).reverse();
 
-  const guarded = (fn: () => void) => (settings.rewardPin && settings.kioskPin ? setPinFor(() => fn) : fn());
+  const guarded = (fn: () => void) => (settings.rewardPin && settings.hasKioskPin ? setPinFor(() => fn) : fn());
   const decide = (r: Redemption, status: 'approved' | 'denied') =>
     guarded(() => {
       set('redemptions', (prev) => prev.map((x) => (x.id === r.id ? { ...x, status } : x)));

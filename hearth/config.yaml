@@ -1,5 +1,5 @@
 name: Hearth
-version: "0.15.11"
+version: "0.15.12"
 slug: hearth
 image: ghcr.io/slinky34/hearth-{arch}
 description: Family wall calendar, chores, lists, meal plan, and photo frame for wall-mounted tablets
@@ -22,7 +22,7 @@ map:
 ports:
   8099/tcp: null
 ports_description:
-  8099/tcp: Direct access for kiosk tablets (no HA login). Leave empty unless you need it.
+  8099/tcp: Direct access for kiosk tablets (no HA login). Set an access key too. Leave empty unless you need it.
 options:
   photo_directory: /media/hearth
   mealie_url: ""
@@ -34,6 +34,7 @@ options:
   frigate_url: ""
   grocy_url: ""
   grocy_api_key: ""
+  access_key: ""
 schema:
   photo_directory: str
   mealie_url: str?
@@ -45,3 +46,4 @@ schema:
   frigate_url: str?
   grocy_url: str?
   grocy_api_key: password?
+  access_key: password?

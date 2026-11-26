@@ -79,6 +79,8 @@ export interface Settings {
   dayStartHour: number;
   /** Optional PIN required to leave kiosk mode (child lock, not real security). */
   kioskPin: string;
+  /** Set by the server: whether a kiosk PIN exists (the PIN itself stays on the server). */
+  hasKioskPin?: boolean;
   /** media_player entities shown in Music; empty = all */
   musicPlayers: string[];
   /** Entities shown on the Home screen (lights, switches, scenes, sensors...) */

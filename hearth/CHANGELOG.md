@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.15.12
+Security fixes from a code review. Nothing changes for screens that open Hearth from the Home Assistant sidebar.
+- **Access key for the direct port:** a new **Access key (direct port)** option on the Configuration tab. When it's set, tablets and phones that use port 8099 ask for the key once and then remember it. Before, anyone on your network could use that port. If you opened port 8099, set a key.
+- **Fixed an image proxy hole:** Hearth's artwork proxy could be tricked into reading other parts of Home Assistant (and add-on settings, including API keys) with Hearth's access. It now only fetches artwork.
+- **Other websites can't control Hearth:** Hearth now refuses requests that come from other websites, so a web page opened on a device at home can't run your scripts or change Hearth through the direct port.
+- **Kiosk PIN stays in the add-on:** the PIN is checked by the add-on and is never sent to screens. After 5 wrong tries, PIN entry pauses for a minute. Changing or removing the PIN asks for the current one, except when you're in Hearth from the Home Assistant sidebar (handy if you forget it).
+- **Home controls and announcements only act on what you picked:** lights, switches, scenes, and scripts work only if they're on the Home screen (Settings → Home controls), and spoken announcements only use the speaker chosen in Settings.
+- Photo and flyer uploads stop when the disk is almost full.
+
 ## 0.15.11
 - **Tapping a song in a playlist plays that song:** Hearth now starts the tapped song by itself, then queues the rest of the list after it. Before, it sent the song plus everything after it as one list, so with shuffle on the speaker usually started a different song, and long playlists could be slow to start.
 

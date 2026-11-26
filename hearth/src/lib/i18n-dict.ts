@@ -3,6 +3,15 @@
 export const LANG_ORDER = ['de', 'es', 'fr', 'it', 'ja', 'ko', 'nl', 'pt'];
 
 export const DICT: Record<string, string[]> = {
+  // Kiosk PIN (server-checked)
+  "PIN saved.": ["PIN gespeichert.", "PIN guardado.", "PIN enregistré.", "PIN salvato.", "PINを保存しました。", "PIN이 저장되었습니다.", "Pincode opgeslagen.", "PIN guardado."],
+  "PIN removed.": ["PIN entfernt.", "PIN eliminado.", "PIN supprimé.", "PIN rimosso.", "PINを削除しました。", "PIN이 삭제되었습니다.", "Pincode verwijderd.", "PIN removido."],
+  "A PIN is set. It is needed to leave kiosk mode.": ["Eine PIN ist festgelegt. Sie wird zum Verlassen des Kioskmodus benötigt.", "Hay un PIN configurado. Se necesita para salir del modo quiosco.", "Un PIN est défini. Il est demandé pour quitter le mode kiosque.", "È impostato un PIN. Serve per uscire dalla modalità kiosk.", "PINが設定されています。キオスクモードを終了するときに必要です。", "PIN이 설정되어 있습니다. 키오스크 모드를 끝낼 때 필요합니다.", "Er is een pincode ingesteld. Die is nodig om de kioskmodus te verlaten.", "Há um PIN definido. É necessário para sair do modo quiosque."],
+  "Current PIN": ["Aktuelle PIN", "PIN actual", "PIN actuel", "PIN attuale", "現在のPIN", "현재 PIN", "Huidige pincode", "PIN atual"],
+  "New PIN": ["Neue PIN", "PIN nuevo", "Nouveau PIN", "Nuovo PIN", "新しいPIN", "새 PIN", "Nieuwe pincode", "Novo PIN"],
+  "Change PIN": ["PIN ändern", "Cambiar PIN", "Changer le PIN", "Cambia PIN", "PINを変更", "PIN 변경", "Pincode wijzigen", "Alterar PIN"],
+  "Save PIN": ["PIN speichern", "Guardar PIN", "Enregistrer le PIN", "Salva PIN", "PINを保存", "PIN 저장", "Pincode opslaan", "Guardar PIN"],
+  "Remove PIN": ["PIN entfernen", "Quitar PIN", "Supprimer le PIN", "Rimuovi PIN", "PINを削除", "PIN 삭제", "Pincode verwijderen", "Remover PIN"],
   // Navigation
   "Today": ["Heute", "Hoy", "Aujourd’hui", "Oggi", "今日", "오늘", "Vandaag", "Hoje"],
   "Calendar": ["Kalender", "Calendario", "Calendrier", "Calendario", "カレンダー", "캘린더", "Agenda", "Calendário"],

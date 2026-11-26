@@ -10,7 +10,7 @@ Open Hearth from the sidebar, then go to **Settings**:
 
 Adding events works for calendars that support it in HA (Local Calendar, Google, CalDAV). Subscribed ICS feeds are read-only.
 
-To use Hearth on a tablet that isn't signed in to HA, set a host port for `8099/tcp` under Network. Anyone on your LAN can reach that port.
+To use Hearth on a tablet that isn't signed in to HA, set a host port for `8099/tcp` under Network. Anyone on your LAN can reach that port, so also set an **Access key (direct port)** on the Configuration tab. Each tablet or phone asks for the key once and then remembers it (you can also open `http://<ha-ip>:8099/?key=<your key>` once). Opening Hearth from the HA sidebar never asks for it.
 
 **Recipes:** add Home Assistant's **Mealie** integration and your recipes and meal plan show up on the Recipes screen. To see recipe photos, also set **Mealie address** (`mealie_url`, for example `http://192.168.1.20:9000`) on the Configuration tab.
 
@@ -48,8 +48,8 @@ Pick cameras under **Settings → Cameras**; any Home Assistant camera works. Fr
 
 ## Phone app
 
-1. On the add-on's **Configuration** tab, set a host port for `8099/tcp` (for example 8099) and restart.
-2. On your phone, on home Wi-Fi, open `http://<your-HA-IP>:8099`.
+1. On the add-on's **Configuration** tab, set a host port for `8099/tcp` (for example 8099) and an **Access key**, then restart.
+2. On your phone, on home Wi-Fi, open `http://<your-HA-IP>:8099` and enter the access key.
 3. iPhone: Share → **Add to Home Screen**. Android: ⋮ → **Add to Home screen**.
 
 Away from home, open Hearth from the Home Assistant Companion app's sidebar, or use a VPN like Tailscale.

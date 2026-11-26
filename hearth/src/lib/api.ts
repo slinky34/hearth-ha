@@ -4,6 +4,11 @@ import type { CalEvent, CalendarInfo, EntityInfo, HaState, Mode, StoreData, Todo
 // All URLs are relative so the app works under Home Assistant ingress paths.
 async function j<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
+  // The direct port's access key was forgotten (cleared cookies): reload to show the key screen.
+  if (res.status === 401 && !url.startsWith('api/pin')) {
+    location.reload();
+    throw new Error('Access key needed');
+  }
   const text = await res.text();
   const body = text ? JSON.parse(text) : null;
   if (!res.ok) throw new Error(body?.message || body?.error || `${res.status} ${res.statusText}`);
@@ -101,6 +106,9 @@ export const api = {
   store: () => j<{ rev: number; data: Partial<StoreData> }>('api/store'),
   putStore: (key: keyof StoreData, value: unknown) =>
     j<{ rev: number }>(`api/store/${key}`, { ...post({ value }), method: 'PUT' }),
+
+  checkPin: (pin: string) => j<{ ok: boolean }>('api/pin/check', post({ pin })),
+  setPin: (pin: string, current: string) => j<{ rev: number; hasKioskPin: boolean }>('api/pin/set', post({ pin, current })),
 
   photos: () => j<string[]>('api/photos'),
   photoUrl: (name: string) =>

@@ -39,3 +39,8 @@ configuration:
   grocy_api_key:
     name: Grocy API key
     description: Create one in Grocy (wrench icon → Manage API keys). Needed when Hearth talks to Grocy directly.
+  access_key:
+    name: Access key (direct port)
+    description: >-
+      Recommended if you opened port 8099. Tablets and phones using the direct port ask for this key once,
+      then remember it. Opening Hearth from the Home Assistant sidebar never asks. Pick something long.

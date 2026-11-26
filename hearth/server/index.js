@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 import { createMockHA } from './mock.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -15,7 +16,7 @@ const IN_ADDON = Boolean(process.env.SUPERVISOR_TOKEN);
 const DIST_DIR = path.resolve(process.env.DIST_DIR || path.join(ROOT, 'dist'));
 const DATA_DIR = path.resolve(process.env.DATA_DIR || (IN_ADDON ? '/data' : path.join(ROOT, '.data')));
 const STORE_FILE = path.join(DATA_DIR, 'hearth.json');
-const VERSION = process.env.HEARTH_VERSION || '0.15.11';
+const VERSION = process.env.HEARTH_VERSION || '0.15.12';
 
 // Add-on options (set on the add-on's Configuration tab in Home Assistant).
 let options = {};
@@ -55,6 +56,9 @@ const BAR = {
   token: String(process.env.BAR_ASSISTANT_TOKEN || options.bar_assistant_token || '').trim(),
   barId: String(process.env.BAR_ASSISTANT_BAR_ID || options.bar_assistant_bar_id || '').trim(),
 };
+
+// Optional: an access key for the direct port (8099). Ingress traffic is already behind the HA login.
+const ACCESS_KEY = String(process.env.HEARTH_ACCESS_KEY || options.access_key || '').trim();
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 try {
@@ -294,6 +298,137 @@ async function streamFile(res, file, cache) {
   fs.createReadStream(file).pipe(res);
 }
 
+// ---------- access control ----------
+// Requests through HA ingress come from the Supervisor's ingress proxy, after HA checked the login.
+const INGRESS_IP = '172.30.32.2';
+const remoteIp = (req) => String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+const viaIngress = (req) => IN_ADDON && remoteIp(req) === INGRESS_IP;
+const sha = (s) => crypto.createHash('sha256').update(s).digest();
+const KEY_COOKIE = 'hearth_key';
+const keyToken = ACCESS_KEY ? sha(`hearth:${ACCESS_KEY}`).toString('hex') : '';
+const sameSecret = (a, b) => crypto.timingSafeEqual(sha(String(a)), sha(String(b)));
+
+function cookies(req) {
+  const out = {};
+  for (const part of String(req.headers.cookie || '').split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0) out[part.slice(0, i).trim()] = part.slice(i + 1).trim();
+  }
+  return out;
+}
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+function keyPage(res, wrong) {
+  res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hearth</title><style>body{font-family:system-ui,sans-serif;background:#faf7f2;color:#2b2420;display:grid;place-items:center;min-height:100vh;margin:0}
+form{background:#fff;padding:28px;border-radius:16px;box-shadow:0 4px 24px #0001;max-width:340px;width:calc(100% - 32px)}
+h1{margin:0 0 8px;font-size:22px}p{margin:0 0 16px;color:#6b625b;font-size:15px}input,button{font:inherit;font-size:17px;width:100%;box-sizing:border-box;padding:12px;border-radius:10px}
+input{border:1px solid #d8d0c8;margin-bottom:12px}button{border:0;background:#e8743b;color:#fff;font-weight:600}.e{color:#c0392b}</style></head>
+<body><form method="get" action=""><h1>🏡 Hearth</h1><p>Enter the access key from the Hearth add-on's Configuration tab. This screen remembers it.</p>
+${wrong ? `<p class="e">${esc('That key is not right.')}</p>` : ''}<input name="key" type="password" autocomplete="current-password" autofocus required>
+<button type="submit">Unlock</button></form></body></html>`);
+}
+
+/** Returns true when the request may continue; otherwise it has already answered. */
+function checkAccess(req, res, url, p) {
+  // Never answer pages or API calls for another website (stops other sites from driving Hearth).
+  const fetchSite = req.headers['sec-fetch-site'];
+  const origin = req.headers.origin;
+  if (p.startsWith('/api/') || p.startsWith('/photos/')) {
+    if (fetchSite === 'cross-site') return send(res, 403, { error: 'Cross-site request refused' }), false;
+    // (Ingress rewrites Host, so this only applies to the direct port.)
+    if (origin && !viaIngress(req)) {
+      let host = '';
+      try { host = new URL(origin).host; } catch { /* bad or "null" origin */ }
+      const hosts = [req.headers.host, ...String(req.headers['x-forwarded-host'] || '').split(',')].map((h) => String(h || '').trim()).filter(Boolean);
+      if (!hosts.includes(host)) return send(res, 403, { error: 'Cross-site request refused' }), false;
+    }
+    // Changes must come from Hearth's own page: browsers won't let other sites add this header.
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.headers['x-hearth'] !== '1')
+      return send(res, 403, { error: 'Missing X-Hearth header' }), false;
+  }
+  if (!ACCESS_KEY || viaIngress(req)) return true;
+  const given = url.searchParams.get('key');
+  if (given != null && req.method === 'GET' && !p.startsWith('/api/')) {
+    if (!sameSecret(given, ACCESS_KEY)) return keyPage(res, true), false;
+    url.searchParams.delete('key');
+    res.writeHead(302, {
+      'Set-Cookie': `${KEY_COOKIE}=${keyToken}; Path=/; Max-Age=315360000; HttpOnly; SameSite=Strict`,
+      Location: url.pathname + (url.search || ''),
+      'Cache-Control': 'no-store',
+    });
+    res.end();
+    return false;
+  }
+  const c = cookies(req)[KEY_COOKIE];
+  if (c && sameSecret(c, keyToken)) return true;
+  if (p.startsWith('/api/') || p.startsWith('/photos/')) return send(res, 401, { error: 'Access key needed' }), false;
+  return keyPage(res, false), false;
+}
+
+// Kiosk PIN: kept on the server only, checked here, with a short lockout after repeated misses.
+const pinFails = new Map();
+function pinLocked(ip) {
+  const f = pinFails.get(ip);
+  return f && f.until > Date.now();
+}
+function pinMiss(ip) {
+  const f = pinFails.get(ip) ?? { n: 0, until: 0 };
+  f.n += 1;
+  if (f.n >= 5) {
+    f.until = Date.now() + 60000 * Math.min(10, f.n - 4);
+  }
+  pinFails.set(ip, f);
+}
+const storedPin = () => String(store.data.settings?.kioskPin || '');
+const pinOk = (pin) => Boolean(storedPin()) && sameSecret(String(pin ?? ''), storedPin());
+/** The store as the browser sees it: the PIN itself never leaves the server. */
+function publicStore() {
+  const s = store.data.settings;
+  if (!s) return store;
+  const { kioskPin, ...rest } = s;
+  return { rev: store.rev, data: { ...store.data, settings: { ...rest, kioskPin: '', hasKioskPin: Boolean(kioskPin) } } };
+}
+
+/** Which entities the Home screen and announcements may act on (picked in Settings). */
+function allowedTarget(svc, body) {
+  const s = store.data.settings ?? {};
+  const id = body?.entity_id;
+  if (typeof id !== 'string') return false;
+  if (svc === 'tts.speak') return id === s.tts?.engine && body.media_player_entity_id === s.tts?.speaker;
+  return Array.isArray(s.controls) && s.controls.includes(id);
+}
+const TARGET_GUARDED = new Set(['light.toggle', 'switch.toggle', 'fan.toggle', 'input_boolean.toggle', 'scene.turn_on', 'script.turn_on', 'tts.speak']);
+
+/** Refuses uploads when the disk is nearly full. */
+async function roomFor(dir, bytes) {
+  try {
+    const st = await fsp.statfs(dir);
+    return st.bavail * st.bsize - bytes > 500_000_000;
+  } catch {
+    return true;
+  }
+}
+
+/** HA-served artwork path, checked after the URL is normalized (so ../ tricks can't escape). */
+function haImageUrl(raw) {
+  const origin = haOrigin();
+  if (!origin || typeof raw !== 'string' || !raw.startsWith('/api/') || raw.includes('\\')) return null;
+  let u;
+  try {
+    u = new URL(origin + raw);
+  } catch {
+    return null;
+  }
+  const base = new URL(origin);
+  const prefix = base.pathname.replace(/\/+$/, '');
+  if (u.origin !== base.origin) return null;
+  const rest = u.pathname.slice(prefix.length);
+  if (!u.pathname.startsWith(prefix + '/') || !/^\/api\/(media_player_proxy|image_proxy|media_source)\/[^/]/.test(rest)) return null;
+  return u;
+}
+
 // ---------- routes ----------
 async function route(req, res) {
   const url = new URL(req.url, 'http://local');
@@ -304,6 +439,7 @@ async function route(req, res) {
     return send(res, 400, { error: 'Bad path' });
   }
   const m = req.method;
+  if (!checkAccess(req, res, url, p)) return;
 
   if (p === '/api/mock/ring' && mock) {
     mock.ring();
@@ -407,10 +543,10 @@ async function route(req, res) {
   }
   // Artwork that HA serves behind its own login (relative /api/... thumbnails).
   if (p === '/api/ha/image' && m === 'GET') {
-    const path_ = url.searchParams.get('path') || '';
-    if (!/^\/api\/(media_player_proxy|image_proxy|media_source)\//.test(path_)) return send(res, 400, 'Bad path');
     if (mock) return send(res, 404, 'No image');
-    const img = await fetch(haOrigin() + path_, { headers: { Authorization: `Bearer ${haToken}` }, signal: AbortSignal.timeout(15000) });
+    const target = haImageUrl(url.searchParams.get('path') || '');
+    if (!target) return send(res, 400, 'Bad path');
+    const img = await fetch(target, { headers: { Authorization: `Bearer ${haToken}` }, signal: AbortSignal.timeout(15000) });
     if (!img.ok) return send(res, img.status, 'Image unavailable');
     return send(res, 200, Buffer.from(await img.arrayBuffer()), { 'Content-Type': img.headers.get('content-type') || 'image/jpeg', 'Cache-Control': 'max-age=3600' });
   }
@@ -421,6 +557,7 @@ async function route(req, res) {
     const buf = await readBody(req, 15_000_000);
     const dir = IN_ADDON ? '/media/hearth-import' : path.join(DATA_DIR, 'import');
     await fsp.mkdir(dir, { recursive: true });
+    if (!(await roomFor(dir, buf.length))) return send(res, 507, { error: 'The disk is almost full' });
     const file = `${Date.now()}-${name.replace(/[^\w.-]+/g, '_')}`;
     await fsp.writeFile(path.join(dir, file), buf);
     // Clean up imports older than a day.
@@ -723,17 +860,54 @@ async function route(req, res) {
     if (!SERVICES.has(svc)) return send(res, 403, { error: `Service ${svc} not allowed` });
     const body = await readJson(req);
     if (SERVICE_GUARDS[svc] && !SERVICE_GUARDS[svc](body)) return send(res, 403, { error: `That use of ${svc} isn't allowed` });
+    if (TARGET_GUARDED.has(svc) && !allowedTarget(svc, body))
+      return send(res, 403, { error: `Add ${body?.entity_id || 'that entity'} in Settings first` });
     const qs = url.searchParams.has('return_response') ? '?return_response' : '';
     const r = await ha('POST', `/services/${match[1]}/${match[2]}${qs}`, body);
     return send(res, r.status, r.data);
   }
 
   // --- store ---
-  if (p === '/api/store' && m === 'GET') return send(res, 200, store);
+  if (p === '/api/store' && m === 'GET') return send(res, 200, publicStore());
+  if (p === '/api/pin/check' && m === 'POST') {
+    const ip = remoteIp(req);
+    if (pinLocked(ip)) return send(res, 429, { error: 'Too many tries. Wait a minute.' });
+    const b = await readJson(req);
+    if (!storedPin()) return send(res, 200, { ok: true });
+    if (pinOk(b.pin)) {
+      pinFails.delete(ip);
+      return send(res, 200, { ok: true });
+    }
+    pinMiss(ip);
+    return send(res, 200, { ok: false });
+  }
+  if (p === '/api/pin/set' && m === 'POST') {
+    const ip = remoteIp(req);
+    if (pinLocked(ip)) return send(res, 429, { error: 'Too many tries. Wait a minute.' });
+    const b = await readJson(req);
+    const pin = String(b.pin ?? '');
+    if (!/^\d{0,8}$/.test(pin)) return send(res, 400, { error: 'Digits only, up to 8' });
+    // Changing an existing PIN needs the current one, except from Home Assistant itself (ingress, signed in).
+    if (storedPin() && !viaIngress(req) && !pinOk(b.current)) {
+      pinMiss(ip);
+      return send(res, 403, { error: 'The current PIN is not right' });
+    }
+    store.data.settings = { ...(store.data.settings ?? {}), kioskPin: pin };
+    store.rev += 1;
+    persist();
+    return send(res, 200, { rev: store.rev, hasKioskPin: Boolean(pin) });
+  }
   match = p.match(/^\/api\/store\/([a-z]+)$/);
   if (match && m === 'PUT') {
     if (!STORE_KEYS.has(match[1])) return send(res, 400, { error: 'Unknown key' });
     const body = await readJson(req);
+    if (match[1] === 'settings') {
+      // The PIN only changes through /api/pin/set; keep the stored one.
+      const v = body.value && typeof body.value === 'object' ? { ...body.value } : {};
+      delete v.hasKioskPin;
+      v.kioskPin = storedPin();
+      body.value = v;
+    }
     store.data[match[1]] = body.value;
     store.rev += 1;
     persist();
@@ -754,6 +928,7 @@ async function route(req, res) {
     const original = safePhotoName(url.searchParams.get('name'));
     if (!original) return send(res, 400, { error: 'Unsupported file type' });
     const buf = await readBody(req, 30_000_000);
+    if (!(await roomFor(PHOTO_DIR, buf.length))) return send(res, 507, { error: 'The disk is almost full' });
     const name = `${Date.now()}-${original.replace(/[^\w.-]+/g, '_')}`;
     await fsp.writeFile(path.join(PHOTO_DIR, name), buf);
     return send(res, 200, { name });
@@ -781,7 +956,7 @@ async function route(req, res) {
   // --- static UI with SPA fallback ---
   if (m !== 'GET' && m !== 'HEAD') return send(res, 405, 'Method not allowed');
   let file = path.normalize(path.join(DIST_DIR, p));
-  if (!file.startsWith(DIST_DIR)) return send(res, 403, 'Forbidden');
+  if (file !== DIST_DIR && !file.startsWith(DIST_DIR + path.sep)) return send(res, 403, 'Forbidden');
   try {
     if ((await fsp.stat(file)).isDirectory()) file = path.join(file, 'index.html');
     await fsp.access(file);

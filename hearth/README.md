@@ -52,10 +52,10 @@ Family members, chores, meals, and settings are stored in the add-on's `/data` f
 
 ### Using it on a wall tablet
 
-**Kiosk mode** (Settings → Kiosk mode, or add `?kiosk` to the direct-port address) turns a screen into a locked wall display. It goes fullscreen (hiding HA's sidebar), keeps the screen awake, hides the cursor, and locks Settings, chore editing, and photo deletion. It only applies to that device. To unlock, hold the 🏡 logo for 2 seconds or tap **Locked**, then enter the optional PIN. The PIN is a child lock, not real security.
+**Kiosk mode** (Settings → Kiosk mode, or add `?kiosk` to the direct-port address) turns a screen into a locked wall display. It goes fullscreen (hiding HA's sidebar), keeps the screen awake, hides the cursor, and locks Settings, chore editing, and photo deletion. It only applies to that device. To unlock, hold the 🏡 logo for 2 seconds or tap **Locked**, then enter the optional PIN. The PIN is checked by the add-on and never sent to the screen; it locks the screen, while the access key protects the direct port.
 
 - **Simplest:** sign in to HA on the tablet and open Hearth from the sidebar (it uses ingress, so it's protected by your HA login). A kiosk browser like Fully Kiosk works well.
-- **Kiosk without an HA login:** in the add-on's **Network** settings, set a host port for `8099/tcp`, then open `http://<ha-ip>:<port>`. Anyone on your LAN can then use it, but only the calendar, to-do, and weather actions Hearth allows.
+- **Kiosk without an HA login:** in the add-on's **Network** settings, set a host port for `8099/tcp`, and set an **Access key (direct port)** on the Configuration tab. Then open `http://<ha-ip>:<port>` and enter the key once; the tablet remembers it. Without a key, anyone on your LAN can use that port.
 
 ## Develop locally
 

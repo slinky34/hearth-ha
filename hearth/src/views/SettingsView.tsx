@@ -663,17 +663,7 @@ export function SettingsView() {
         <p className="muted small">
           {t('For a wall tablet: goes fullscreen (hiding Home Assistant’s sidebar too), keeps the screen awake, hides the cursor, and locks Settings, chore editing, and photo deletion. It only applies to this screen. To leave, hold the 🏡 logo for 2 seconds or tap Locked. You can also add ?kiosk to the end of its address to turn it on.')}
         </p>
-        <label className="pin-row">
-          <span className="muted small">{t('PIN to leave kiosk mode (optional, digits only)')}</span>
-          <input
-            type="password"
-            inputMode="numeric"
-            placeholder={t('No PIN')}
-            value={settings.kioskPin}
-            onChange={(e) => s('kioskPin', e.target.value.replace(/\D/g, '').slice(0, 8))}
-            style={{ maxWidth: 220 }}
-          />
-        </label>
+        <KioskPinForm />
         <div>
           <button className="btn primary" onClick={() => setKiosk(true)}>
             <Lock size={18} /> {t('Turn on kiosk mode on this screen')}
@@ -701,6 +691,45 @@ export function SettingsView() {
           <input ref={restoreInput} type="file" accept="application/json,.json" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) importData(f); }} />
         </div>
       </Section>
+    </div>
+  );
+}
+
+/** Set, change, or remove the kiosk PIN. The PIN is checked and kept on the server, never sent back. */
+function KioskPinForm() {
+  const { data, set } = useStore();
+  const has = Boolean(data.settings.hasKioskPin);
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const digits = (v: string) => v.replace(/\D/g, '').slice(0, 8);
+  const save = async (pin: string) => {
+    try {
+      const r = await api.setPin(pin, current);
+      set('settings', (prev) => ({ ...prev, hasKioskPin: r.hasKioskPin }));
+      setCurrent('');
+      setNext('');
+      setMsg({ ok: true, text: r.hasKioskPin ? t('PIN saved.') : t('PIN removed.') });
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message });
+    }
+  };
+  return (
+    <div className="form" style={{ gap: 8 }}>
+      <span className="muted small">
+        {has ? t('A PIN is set. It is needed to leave kiosk mode.') : t('PIN to leave kiosk mode (optional, digits only)')}
+      </span>
+      {has && (
+        <input type="password" inputMode="numeric" placeholder={t('Current PIN')} value={current}
+          onChange={(e) => setCurrent(digits(e.target.value))} style={{ maxWidth: 220 }} />
+      )}
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <input type="password" inputMode="numeric" placeholder={has ? t('New PIN') : t('No PIN')} value={next}
+          onChange={(e) => setNext(digits(e.target.value))} onKeyDown={(e) => e.key === 'Enter' && next && save(next)} style={{ maxWidth: 220 }} />
+        <button className="btn" disabled={!next} onClick={() => save(next)}>{has ? t('Change PIN') : t('Save PIN')}</button>
+        {has && <button className="btn ghost" onClick={() => save('')}>{t('Remove PIN')}</button>}
+      </div>
+      {msg && <p className={msg.ok ? 'muted small' : 'error'} style={{ margin: 0 }}>{msg.text}</p>}
     </div>
   );
 }
