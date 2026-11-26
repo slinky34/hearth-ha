@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.13
+- **Recipe amounts:** ingredients that Mealie stored as plain text (not split into amount, unit, and food) no longer show a stray "0," in front, as in "0, 0.5 cup".
+- **½× and 2× work for every ingredient:** in Cook mode, plain-text ingredients now scale too, including fractions ("1 1/2", "¾", "1½"), decimals ("0.5", "0,5"), and ranges ("2-3 cloves").
+- Amounts read more cleanly: "0.5 cup" shows as "½ cup", and halving ¾ now gives ⅜ instead of ⅓.
+
 ## 0.15.12
 Security fixes from a code review. Nothing changes for screens that open Hearth from the Home Assistant sidebar.
 - **Access key for the direct port:** a new **Access key (direct port)** option on the Configuration tab. When it's set, tablets and phones that use port 8099 ask for the key once and then remember it. Before, anyone on your network could use that port. If you opened port 8099, set a key.

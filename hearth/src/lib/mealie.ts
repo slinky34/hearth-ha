@@ -107,7 +107,7 @@ export async function getRecipe(idOrSlug: string): Promise<Recipe> {
       food: str(i.food),
       note: str(i.note),
       title: str(i.title),
-      display: str(i.display),
+      display: str(i.display) || str(i.original_text),
     })),
     steps: (x.instructions ?? x.recipe_instructions ?? [])
       .map((s: any) => ({ title: str(s.title) || str(s.summary), text: str(s.text) ?? '' }))
@@ -121,21 +121,52 @@ export async function planRecipe(recipeId: string, date: string, type: string) {
 
 export const imageUrl = (id: string) => `api/mealie/image/${encodeURIComponent(id)}`;
 
-const FRACTIONS: [number, string][] = [[0.125, '⅛'], [0.25, '¼'], [1 / 3, '⅓'], [0.5, '½'], [2 / 3, '⅔'], [0.75, '¾']];
+const FRACTIONS: [number, string][] = [[0.125, '⅛'], [0.25, '¼'], [1 / 3, '⅓'], [0.375, '⅜'], [0.5, '½'], [0.625, '⅝'], [2 / 3, '⅔'], [0.75, '¾'], [0.875, '⅞']];
 export function niceQty(q: number) {
   const whole = Math.floor(q + 1e-6);
   const frac = q - whole;
   if (frac < 0.06) return String(whole);
-  const f = FRACTIONS.find(([v]) => Math.abs(v - frac) < 0.05);
+  if (frac > 0.96) return String(whole + 1);
+  const f = FRACTIONS.find(([v]) => Math.abs(v - frac) < 0.02);
   if (f) return `${whole ? whole : ''}${f[1]}`;
   return String(Math.round(q * 100) / 100);
 }
 
+const UNI: Record<string, number> = { '½': 0.5, '⅓': 1 / 3, '⅔': 2 / 3, '¼': 0.25, '¾': 0.75, '⅛': 0.125, '⅜': 0.375, '⅝': 0.625, '⅞': 0.875 };
+const NUM = String.raw`(?:\d+\s+\d+\/\d+|\d+\/\d+|\d+\s*[½⅓⅔¼¾⅛⅜⅝⅞]|[½⅓⅔¼¾⅛⅜⅝⅞]|\d+(?:[.,]\d+)?)`;
+const LEADING_AMOUNT = new RegExp(String.raw`^(\s*)(${NUM})(?:(\s*(?:-|–|to)\s*)(${NUM}))?(?=\s|$|[a-zA-Z])`);
+
+/** "1 1/2", "3/4", "1½", "½", "0.5", "0,5" -> number. */
+function parseAmount(raw: string): number | null {
+  const t = raw.trim();
+  let m = t.match(/^(\d+)\s+(\d+)\/(\d+)$/);
+  if (m) return Number(m[3]) ? Number(m[1]) + Number(m[2]) / Number(m[3]) : null;
+  m = t.match(/^(\d+)\/(\d+)$/);
+  if (m) return Number(m[2]) ? Number(m[1]) / Number(m[2]) : null;
+  m = t.match(/^(\d*)\s*([½⅓⅔¼¾⅛⅜⅝⅞])$/);
+  if (m) return (m[1] ? Number(m[1]) : 0) + UNI[m[2]];
+  const n = Number(t.replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Scales and tidies the amount at the start of a free-text ingredient line ("0.5 cup sugar" -> "½ cup sugar", "2-3 cloves garlic"). */
+export function scaleLine(text: string, scale: number) {
+  const m = text.match(LEADING_AMOUNT);
+  if (!m) return text;
+  const a = parseAmount(m[2]);
+  const b = m[4] != null ? parseAmount(m[4]) : null;
+  if (a == null || (m[4] != null && b == null)) return text;
+  const scaled = niceQty(a * scale) + (b != null ? `${m[3]}${niceQty(b * scale)}` : '');
+  return m[1] + scaled + text.slice(m[0].length);
+}
+
 /** One line of an ingredient, scaled. */
 export function ingredientText(i: Ingredient, scale: number) {
-  if (i.quantity == null && i.display && scale === 1) return i.display;
-  const parts = [i.quantity != null ? niceQty(i.quantity * scale) : '', i.unit ?? '', i.food ?? ''].filter(Boolean).join(' ');
-  if (!parts) return i.note ?? i.display ?? '';
+  // Mealie keeps ingredients it never parsed as plain text (in the note), with an amount of 0 or none.
+  const hasQty = i.quantity != null && i.quantity > 0;
+  if (!hasQty && !i.unit && !i.food) return scaleLine(i.note || i.display || '', scale);
+  const parts = [hasQty ? niceQty(i.quantity! * scale) : '', i.unit ?? '', i.food ?? ''].filter(Boolean).join(' ');
+  if (!parts) return scaleLine(i.note ?? i.display ?? '', scale);
   return i.note ? `${parts}, ${i.note}` : parts;
 }
 

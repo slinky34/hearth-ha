@@ -202,7 +202,7 @@ export function createMockHA() {
     {
       recipe_id: 'r-pancakes', slug: 'banana-pancakes', name: 'Banana Pancakes', recipe_yield: '12 pancakes', total_time: '25 minutes',
       description: 'Fluffy Saturday pancakes with mashed banana.', color: '#E3B92F', emoji: '🥞',
-      ingredients: [ing(2, 'cup', 'flour'), ing(2, 'tablespoon', 'sugar'), ing(1, 'tablespoon', 'baking powder'), ing(2, '', 'ripe bananas', 'mashed'), ing(1.5, 'cup', 'milk'), ing(2, '', 'eggs')],
+      ingredients: [ing(2, 'cup', 'flour'), ing(2, 'tablespoon', 'sugar'), ing(1, 'tablespoon', 'baking powder'), ing(2, '', 'ripe bananas', 'mashed'), ing(1.5, 'cup', 'milk'), ing(2, '', 'eggs'), ing(0, null, null, '0.5 cup chopped walnuts'), ing(0, null, null, '1 1/2 teaspoons vanilla')],
       instructions: [step('Whisk the flour, sugar, and baking powder in a bowl.'), step('In another bowl mash the bananas, then whisk in the milk and eggs.'), step('Fold wet into dry until just combined. Let the batter rest for 5 minutes.'), step('Cook 1/4 cup scoops on a buttered griddle for 2 to 3 minutes per side.')],
     },
     {
