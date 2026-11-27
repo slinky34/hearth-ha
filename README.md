@@ -78,5 +78,6 @@ Create the token from your HA profile → Security → Long-lived access tokens.
 - `hearth/src`: React + TypeScript + Vite UI. All URLs are relative so it works under ingress.
 - `hearth/server`: a dependency-free Node server. It serves the UI, proxies an allowlist of HA REST calls (calendars, `todo.*`, `calendar.create_event`, `weather.get_forecasts`) with the Supervisor token, stores the JSON data, and manages photos. `mock.js` is the demo-mode stand-in for HA.
 - `hearth/Dockerfile`: builds the UI in a Node stage and runs it on the HA base image.
+- **Releases:** bump `version` in `hearth/config.yaml`, add a matching `## X.Y.Z` section to `hearth/CHANGELOG.md`, and push to `main`. GitHub Actions builds the images, then creates the `vX.Y.Z` tag and release.
 
 Inspired by [Beacon](https://github.com/asachs01/beacon).

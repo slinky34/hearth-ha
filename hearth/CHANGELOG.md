@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.15.14
+- **Automatic releases:** new versions now publish themselves. When the version number changes, GitHub builds the add-on images and then creates the release. If Home Assistant offers an update in the first couple of minutes and it fails, try again once the build is done. No changes to the app itself.
+
 ## 0.15.13
 - **Recipe amounts:** ingredients that Mealie stored as plain text (not split into amount, unit, and food) no longer show a stray "0," in front, as in "0, 0.5 cup".
 - **½× and 2× work for every ingredient:** in Cook mode, plain-text ingredients now scale too, including fractions ("1 1/2", "¾", "1½"), decimals ("0.5", "0,5"), and ranges ("2-3 cloves").

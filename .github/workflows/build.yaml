@@ -1,9 +1,16 @@
-# Builds ready-to-run add-on images for each release tag, so Home Assistant just
-# downloads them instead of compiling Hearth on your HA box.
+# Builds ready-to-run add-on images, so Home Assistant just downloads them
+# instead of compiling Hearth on your HA box.
+#
+# Releasing: bump `version` in hearth/config.yaml (with a matching "## X.Y.Z"
+# section in hearth/CHANGELOG.md) and push to main. This workflow then builds
+# the images, creates the vX.Y.Z tag, and publishes the GitHub release.
+# Pushes that don't change the version build nothing.
 name: Build add-on images
 
 on:
   push:
+    branches: [main]
+    paths: ['hearth/config.yaml']
     tags: ['v*']
   workflow_dispatch:
 
@@ -11,8 +18,42 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      build: ${{ steps.v.outputs.build }}
+      release: ${{ steps.v.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read add-on version and decide what to do
+        id: v
+        run: |
+          version="$(sed -nE 's/^version: *"?([^"]+)"?/\1/p' hearth/config.yaml)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] || [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            # A hand-made release or a manual run: build, the release already exists or isn't wanted.
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          elif git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+            echo "v$version is already released; nothing to do."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New version $version: building and releasing."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: check
+    if: needs.check.outputs.build == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -24,11 +65,6 @@ jobs:
             platform: linux/arm64
     steps:
       - uses: actions/checkout@v4
-
-      - name: Read add-on version
-        id: v
-        run: |
-          echo "version=$(sed -nE 's/^version: *"?([^"]+)"?/\1/p' hearth/config.yaml)" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
@@ -48,14 +84,36 @@ jobs:
           build-args: |
             BUILD_FROM=ghcr.io/home-assistant/${{ matrix.arch }}-base:3.21
             BUILD_ARCH=${{ matrix.arch }}
-            BUILD_VERSION=${{ steps.v.outputs.version }}
+            BUILD_VERSION=${{ needs.check.outputs.version }}
           tags: |
-            ghcr.io/${{ github.repository_owner }}/hearth-${{ matrix.arch }}:${{ steps.v.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/hearth-${{ matrix.arch }}:${{ needs.check.outputs.version }}
             ghcr.io/${{ github.repository_owner }}/hearth-${{ matrix.arch }}:latest
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             io.hass.type=addon
             io.hass.arch=${{ matrix.arch }}
-            io.hass.version=${{ steps.v.outputs.version }}
+            io.hass.version=${{ needs.check.outputs.version }}
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+
+  # Only after both images built, so a release never points at missing images.
+  release:
+    needs: [check, build]
+    if: needs.check.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create tag and GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          awk -v want="## $VERSION" '
+            /^## / { if (found) exit; if ($0 == want) { found = 1; next } }
+            found { print }
+          ' hearth/CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then echo "See hearth/CHANGELOG.md." > notes.md; fi
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "Hearth $VERSION" --notes-file notes.md
